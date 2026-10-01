@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="light dark">
+  <meta name="author" content="Graziano Melzi · OnAir Garage">
+  <title>File Renamer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <img class="brand__icon" src="logo.svg" alt="" width="30" height="30">
+      <div>
+        <h1 class="brand__title" data-i18n="app.title">File Renamer</h1>
+        <p class="brand__sub" data-i18n="app.subtitle">Batch rename audio and video files</p>
+      </div>
+    </div>
+    <div class="controls">
+      <label class="ctl"><span class="ctl__label" data-i18n="ctl.language">Language</span><select id="langSel"></select></label>
+      <label class="ctl"><span class="ctl__label" data-i18n="ctl.theme">Theme</span>
+        <select id="themeSel">
+          <option value="auto" data-i18n="theme.auto">Auto</option>
+          <option value="light" data-i18n="theme.light">Light</option>
+          <option value="dark" data-i18n="theme.dark">Dark</option>
+        </select>
+      </label>
+      <button type="button" id="updBtn" class="btn btn--ghost" data-i18n="ctl.update">Updates</button>
+      <button type="button" id="helpBtn" class="btn btn--ghost" data-i18n="ctl.help">How it works</button>
+    </div>
+  </header>
+
+  <section class="builder" aria-label="Pattern">
+    <div class="pattern">
+      <label for="pattern" class="ctl__label" data-i18n="pat.label">Name pattern</label>
+      <input id="pattern" class="mono" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" list="recent" value="{date:yyyyMMdd}_{seq:3}_{orig}">
+      <datalist id="recent"></datalist>
+      <p class="hint" id="patHint" data-i18n="pat.hint">Applied to the name without extension. The extension is kept.</p>
+      <p class="warn" id="patWarn" hidden></p>
+    </div>
+    <div class="chips" role="group" aria-label="Placeholders">
+      <button type="button" class="chip mono" data-ins="{date:yyyyMMdd}" data-i18n-title="ph.date">{date}</button>
+      <button type="button" class="chip mono" data-ins="{time:HHmmss}" data-i18n-title="ph.time">{time}</button>
+      <button type="button" class="chip mono" data-ins="{mdate:yyyyMMdd}" data-i18n-title="ph.mdate">{mdate}</button>
+      <button type="button" class="chip mono" data-ins="{mtime:HHmmss}" data-i18n-title="ph.mtime">{mtime}</button>
+      <button type="button" class="chip mono" data-ins="{seq:3}" data-i18n-title="ph.seq">{seq}</button>
+      <button type="button" class="chip mono" data-ins="{rand:6}" data-i18n-title="ph.rand">{rand}</button>
+      <button type="button" class="chip mono" data-ins="{env:NAME}" data-i18n-title="ph.env">{env}</button>
+      <button type="button" class="chip mono" data-ins="{orig}" data-i18n-title="ph.orig">{orig}</button>
+    </div>
+    <div class="opts">
+      <label class="field"><span data-i18n="seq.start">Counter starts at</span><input id="seqStart" class="mono num" type="number" step="1" value="1"></label>
+      <label class="field"><span data-i18n="seq.step">Step</span><input id="seqStep" class="mono num" type="number" step="1" value="1"></label>
+      <button type="button" id="rerollBtn" class="btn btn--ghost" data-i18n="rand.new">New random values</button>
+      <label class="check"><input id="optRecursive" type="checkbox"><span data-i18n="opt.recursive">Include subfolders</span></label>
+      <label class="check"><input id="optAv" type="checkbox" checked><span data-i18n="opt.avonly">Folders: audio/video only</span></label>
+    </div>
+  </section>
+
+  <main class="list" id="listArea">
+    <div class="listhead" id="listHead" hidden>
+      <label class="cell-check"><input id="selAll" type="checkbox" data-i18n-aria="col.all" aria-label="Select all"></label>
+      <span class="cell-idx">#</span>
+      <span data-i18n="col.current">Current name</span>
+      <span></span>
+      <span data-i18n="col.new">New name</span>
+      <span class="cell-status"><select id="sortSel" data-i18n-aria="sort.label" aria-label="Sort">
+        <option value="added" data-i18n="sort.added">Order added</option>
+        <option value="nameAsc" data-i18n="sort.nameAsc">Name A–Z</option>
+        <option value="nameDesc" data-i18n="sort.nameDesc">Name Z–A</option>
+        <option value="modified" data-i18n="sort.modified">Modified, oldest first</option>
+      </select></span>
+    </div>
+    <div class="rows" id="rows"></div>
+    <div class="empty" id="empty">
+      <p class="empty__title" data-i18n="empty.title">Drop files or folders here</p>
+      <p class="empty__text" data-i18n="empty.text">Nothing is renamed until you check the preview and confirm.</p>
+    </div>
+  </main>
+
+  <div class="update-banner" id="updBanner" hidden>
+    <span id="updBannerText"></span>
+    <button type="button" class="btn btn--small" id="updBannerBtn" data-i18n="ctl.update">Updates</button>
+  </div>
+
+  <div class="bottom">
+    <div class="actionbar">
+      <div class="summary" id="summary" aria-live="polite"></div>
+      <div class="actions">
+        <button type="button" id="addFilesBtn" class="btn btn--ghost" data-i18n="btn.addFiles">Add files…</button>
+        <button type="button" id="addFolderBtn" class="btn btn--ghost" data-i18n="btn.addFolder">Add folder…</button>
+        <button type="button" id="clearBtn" class="btn btn--ghost" data-i18n="btn.clear">Clear list</button>
+        <button type="button" id="undoBtn" class="btn btn--ghost" data-i18n="btn.undo" disabled>Undo last batch</button>
+        <button type="button" id="renameBtn" class="btn btn--primary" disabled>Rename…</button>
+      </div>
+    </div>
+    <footer class="foot">
+      <span data-i18n="foot.by">Graziano Melzi · OnAir Garage</span><span aria-hidden="true">·</span>
+      <a href="https://onairgarage.com" data-ext>onairgarage.com</a><span aria-hidden="true">·</span>
+      <span data-i18n="foot.license">MIT License</span><span aria-hidden="true">·</span>
+      <span><span data-i18n="foot.contact">Contact</span>: hello@onairgarage.com</span><span aria-hidden="true">·</span>
+      <span id="ver" class="mono">v0.0.0</span>
+    </footer>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <dialog id="confirmDlg" class="dlg">
+    <h2 data-i18n="confirm.title">Confirm rename</h2>
+    <p id="confirmText"></p>
+    <ul class="pairs mono" id="confirmPairs"></ul>
+    <div class="dlg__actions">
+      <button type="button" class="btn btn--ghost" id="confirmCancel" data-i18n="confirm.cancel">Cancel</button>
+      <button type="button" class="btn btn--primary" id="confirmOk" data-i18n="confirm.ok">Rename</button>
+    </div>
+  </dialog>
+
+  <dialog id="resultDlg" class="dlg">
+    <h2 id="resultTitle" data-i18n="result.title">Done</h2>
+    <p id="resultText"></p>
+    <ul class="pairs mono" id="resultList"></ul>
+    <p class="hint" id="resultHint"></p>
+    <div class="dlg__actions"><button type="button" class="btn btn--primary" id="resultClose" data-i18n="result.close">Close</button></div>
+  </dialog>
+
+  <dialog id="undoDlg" class="dlg">
+    <h2 data-i18n="undo.title">Undo last batch</h2>
+    <p id="undoText"></p>
+    <ul class="pairs mono" id="undoList"></ul>
+    <div class="dlg__actions">
+      <button type="button" class="btn btn--ghost" id="undoCancel" data-i18n="confirm.cancel">Cancel</button>
+      <button type="button" class="btn btn--primary" id="undoOk" data-i18n="undo.ok">Undo</button>
+    </div>
+  </dialog>
+
+  <dialog id="updDlg" class="dlg">
+    <h2 data-i18n="ctl.update">Updates</h2>
+    <p id="updText"></p>
+    <div class="progress" id="updProgress" hidden><div class="progress__bar" id="updBar"></div></div>
+    <label class="check"><input id="updAuto" type="checkbox"><span data-i18n="upd.auto">Check for updates when the app starts</span></label>
+    <div class="dlg__actions">
+      <button type="button" class="btn btn--ghost" id="updCheck" data-i18n="upd.check">Check for updates</button>
+      <button type="button" class="btn btn--ghost" id="updPage" hidden data-i18n="upd.page">Release page</button>
+      <button type="button" class="btn btn--primary" id="updDownload" hidden data-i18n="upd.download">Download</button>
+      <button type="button" class="btn btn--primary" id="updShow" hidden data-i18n="upd.show">Show file</button>
+      <button type="button" class="btn btn--ghost" id="updClose" data-i18n="upd.close">Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="helpDlg" class="dlg dlg--help">
+    <div class="help__head"><h2 data-i18n="help.title">How it works</h2><button type="button" class="btn btn--ghost" id="helpClose" data-i18n="help.close">Close</button></div>
+    <div class="help__body">
+      <h3 data-i18n="help.hWhat">What it does</h3>
+      <p data-i18n="help.pWhat"></p>
+      <h3 data-i18n="help.hUse">How to use it</h3>
+      <ol>
+        <li data-i18n="help.u1"></li><li data-i18n="help.u2"></li><li data-i18n="help.u3"></li><li data-i18n="help.u4"></li><li data-i18n="help.u5"></li>
+      </ol>
+      <h3 data-i18n="help.hPh">Placeholders</h3>
+      <p data-i18n="help.phIntro"></p>
+      <ul class="phlist">
+        <li><code>{date}</code> <code>{date:FORMAT}</code> — <span data-i18n="help.ph.date"></span></li>
+        <li><code>{time}</code> <code>{time:FORMAT}</code> — <span data-i18n="help.ph.time"></span></li>
+        <li><code>{mdate}</code> <code>{mtime}</code> — <span data-i18n="help.ph.mdate"></span></li>
+        <li><code>{date+1h:H}</code> — <span data-i18n="help.ph.shift"></span></li>
+        <li><code>{seq}</code> <code>{seq:N}</code> — <span data-i18n="help.ph.seq"></span></li>
+        <li><code>{rand}</code> <code>{rand:N}</code> — <span data-i18n="help.ph.rand"></span></li>
+        <li><code>{env:NAME}</code> — <span data-i18n="help.ph.env"></span></li>
+        <li><code>{orig}</code> — <span data-i18n="help.ph.orig"></span></li>
+      </ul>
+      <p data-i18n="help.phFmt"></p>
+      <p data-i18n="help.phNow"></p>
+      <h3 data-i18n="help.hSafe">Safety</h3>
+      <ul><li data-i18n="help.s1"></li><li data-i18n="help.s2"></li><li data-i18n="help.s3"></li><li data-i18n="help.s4"></li><li data-i18n="help.s5"></li></ul>
+      <h3 data-i18n="help.hVal">Validation</h3>
+      <p data-i18n="help.vIntro"></p>
+      <div class="tablewrap"><table>
+        <thead><tr><th data-i18n="help.vTh1"></th><th data-i18n="help.vTh2"></th><th data-i18n="help.vTh3"></th></tr></thead>
+        <tbody>
+          <tr><td data-i18n="help.v1a"></td><td data-i18n="help.v1b"></td><td data-i18n="help.v1c"></td></tr>
+          <tr><td data-i18n="help.v2a"></td><td data-i18n="help.v2b"></td><td data-i18n="help.v2c"></td></tr>
+          <tr><td data-i18n="help.v3a"></td><td data-i18n="help.v3b"></td><td data-i18n="help.v3c"></td></tr>
+        </tbody>
+      </table></div>
+      <p data-i18n="help.vNot"></p>
+      <h3 data-i18n="help.hInst">Install and updates</h3>
+      <p data-i18n="help.pInst"></p>
+      <h3 data-i18n="help.hPriv">Privacy</h3>
+      <p data-i18n="help.pPriv"></p>
+    </div>
+  </dialog>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
