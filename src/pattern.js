@@ -11,12 +11,13 @@
 //   {rand}, {rand:N}  -> random lowercase alphanumeric string (default 6, max 64)
 //   {env:NAME}        -> value of the environment variable NAME ('' when unset)
 //   {orig}            -> original file name without extension
+//   {parent}          -> name of the folder that contains the file
 //
 // FORMAT tokens (own implementation, not date-fns): yyyy yy MM M dd d HH H hh h mm m ss s SSS a.
 // Text between single quotes is literal ('T'). Any other character is copied as is.
 
 const PLACEHOLDER_RE = /\{([a-zA-Z]+)(?:([+-]\d+)([mhd]))?(?::([^}]*))?\}/g;
-const KNOWN = new Set(['date', 'time', 'mdate', 'mtime', 'seq', 'rand', 'env', 'orig']);
+const KNOWN = new Set(['date', 'time', 'mdate', 'mtime', 'seq', 'rand', 'env', 'orig', 'parent']);
 const MAX_RAND = 64;
 const MAX_PAD = 20;
 
@@ -84,7 +85,7 @@ function randomString(len, rng) {
   return out;
 }
 
-// ctx: { now: Date, mtime: Date (file modification time), seq: number, orig: string, rng: () => number, env: object }
+// ctx: { now: Date, mtime: Date (file modification time), seq: number, orig: string, parent: string (folder name), rng: () => number, env: object }
 export function resolveTemplate(template, ctx = {}) {
   const now = ctx.now instanceof Date ? ctx.now : new Date();
   const mtime = ctx.mtime instanceof Date && !isNaN(ctx.mtime) ? ctx.mtime : now;
@@ -114,6 +115,8 @@ export function resolveTemplate(template, ctx = {}) {
         return Object.prototype.hasOwnProperty.call(env, arg) ? String(env[arg]) : '';
       case 'orig':
         return String(ctx.orig ?? '');
+      case 'parent':
+        return String(ctx.parent ?? '');
     }
     return match;
   });

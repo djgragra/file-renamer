@@ -15,7 +15,7 @@ const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-e2e-ud-'));
 for (const n of ['b.wav', 'a.wav', 'c.mp3', 'notes.txt']) fs.writeFileSync(path.join(dir, n), n);
 
 const port = 9300 + Math.floor(Math.random() * 500);
-const child = spawn(electron, [root, `--remote-debugging-port=${port}`, `--user-data-dir=${userData}`], { stdio: 'ignore', env: { ...process.env, FR_E2E_ENV: "RTL" } });
+const child = spawn(electron, [root, ...(process.env.FR_E2E_NO_SANDBOX ? ['--no-sandbox'] : []), `--remote-debugging-port=${port}`, `--user-data-dir=${userData}`], { stdio: 'ignore', env: { ...process.env, FR_E2E_ENV: "RTL" } });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function target() {
@@ -81,10 +81,48 @@ try {
   assert.deepEqual(fs.readdirSync(dir).sort(), ['a.wav', 'b.wav', 'c.mp3', 'notes.txt']);
   assert.equal((await evalJs('api.undo.info()')).available, false);
 
+  // find & replace, clean up and {parent} through the real IPC
+  fs.mkdirSync(path.join(dir, 'Giorno 1'));
+  fs.writeFileSync(path.join(dir, 'Giorno 1', 'Città copy.WAV'), 'x');
+  const cp = path.join(dir, 'Giorno 1', 'Città copy.WAV');
+  const tplan = await evalJs(`api.plan([{path:${JSON.stringify(cp)}, selected:true}], {pattern:'{parent}_{orig}', seed:1, find:{text:' copy', replace:''}, clean:{accents:true, special:false, case:'lower', spaces:'underscore'}})`);
+  assert.equal(tplan[0].newName, 'giorno_1_citta.WAV');
+  const rplan = await evalJs(`api.plan([{path:${JSON.stringify(cp)}, selected:true}], {pattern:'{orig}', seed:1, find:{text:'(', regex:true}})`);
+  assert.deepEqual(rplan[0].reasons, ['bad-regex']);
+
+  // settings live in the main process and survive in a file
+  const s0 = await evalJs('api.settings.get()');
+  assert.equal(s0.language, 'en');
+  await evalJs(`api.settings.update({language:'it', presets:[{id:'p1', name:'Giro', pattern:'{parent}_{seq:2}'}]})`);
+  assert.equal((await evalJs('api.settings.get()')).presets[0].name, 'Giro');
+  const saved = JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8'));
+  assert.equal(saved.settings.language, 'it');
+  assert.equal((await evalJs('api.whatsNew.get()')), null); // a new installation says nothing
+
+  // the interface: settings dialog with its four tabs, the preset list, the status pill
+  await cdp('Page.reload'); // (the app itself refuses navigation)
+  for (let i = 0; i < 40 && (await evalJs("document.getElementById('langSel').value").catch(() => '')) !== 'it'; i++) await sleep(250);
+  assert.equal(await evalJs("document.getElementById('langSel').value"), 'it');
+  assert.equal(await evalJs("document.querySelectorAll('#presetSel option').length"), 2);
+  await evalJs("document.getElementById('setBtn').click()");
+  assert.equal(await evalJs("document.getElementById('setDlg').open"), true);
+  assert.deepEqual(await evalJs("[...document.querySelectorAll('#setDlg .tab')].map((b) => b.dataset.tab)"), ['general', 'updates', 'backup', 'about']);
+  await evalJs("document.querySelector('#setDlg .tab[data-tab=about]').click()");
+  assert.match(await evalJs("document.getElementById('abVersion').textContent"), /^\d+\.\d+\.\d+$/);
+  assert.match(await evalJs("window.api.copySupportInfo()"), /File Renamer \d+\.\d+\.\d+\nElectron /);
+  // support info never carries file names or folders the user chose
+  assert.ok(!(await evalJs('window.api.copySupportInfo()')).includes(dir));
+  await evalJs("document.getElementById('setClose').click()");
+  assert.ok(fs.readdirSync(path.join(userData, 'logs')).some((n) => /^file-renamer_\d{2}-\d{2}-\d{4}\.log$/.test(n)));
+  const logText = fs.readdirSync(path.join(userData, 'logs')).map((n) => fs.readFileSync(path.join(userData, 'logs', n), 'utf8')).join('\n');
+  assert.match(logText, /rename: 3 renamed, 0 failed/);
+  assert.ok(!logText.includes('RTL_05'), 'file names must not be logged');
+
   console.log('e2e OK');
 } finally {
   ws?.close();
   child.kill();
+  await new Promise((r) => (child.exitCode === null ? child.once('exit', r) : r()));
   fs.rmSync(dir, { recursive: true, force: true });
-  fs.rmSync(userData, { recursive: true, force: true });
+  fs.rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

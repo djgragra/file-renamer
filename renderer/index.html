@@ -12,25 +12,18 @@
 <body>
   <header class="top">
     <div class="brand">
-      <img class="brand__icon" src="logo.svg" alt="" width="30" height="30">
-      <div>
-        <h1 class="brand__title" data-i18n="app.title">File Renamer</h1>
-        <p class="brand__sub" data-i18n="app.subtitle">Batch rename audio and video files</p>
-      </div>
+      <img class="brand-logo" src="logo.svg" alt="" width="34" height="34">
+      <h1 class="brand-name">File <b>Renamer</b></h1>
+      <span id="ver" class="brand-ver mono">v0.0.0</span>
     </div>
-    <div class="controls">
-      <label class="ctl"><span class="ctl__label" data-i18n="ctl.language">Language</span><select id="langSel"></select></label>
-      <label class="ctl"><span class="ctl__label" data-i18n="ctl.theme">Theme</span>
-        <select id="themeSel">
-          <option value="auto" data-i18n="theme.auto">Auto</option>
-          <option value="light" data-i18n="theme.light">Light</option>
-          <option value="dark" data-i18n="theme.dark">Dark</option>
-        </select>
-      </label>
-      <button type="button" id="updBtn" class="btn btn--ghost" data-i18n="ctl.update">Updates</button>
-      <button type="button" id="helpBtn" class="btn btn--ghost" data-i18n="ctl.help">How it works</button>
+    <div class="top-status"><span class="status-pill" id="statusPill"><span class="led" id="statusLed"></span><span id="statusText"></span></span></div>
+    <div class="top-actions">
+      <button type="button" id="helpBtn" class="btn btn--ghost" data-icon="help"><span data-i18n="ctl.help">How it works</span></button>
+      <button type="button" id="setBtn" class="btn btn--ghost" data-icon="gear"><span data-i18n="ctl.settings">Settings</span></button>
     </div>
   </header>
+
+  <div class="update-bar" id="updBar" role="status" hidden></div>
 
   <section class="builder" aria-label="Pattern">
     <div class="pattern">
@@ -49,6 +42,7 @@
       <button type="button" class="chip mono" data-ins="{rand:6}" data-i18n-title="ph.rand">{rand}</button>
       <button type="button" class="chip mono" data-ins="{env:NAME}" data-i18n-title="ph.env">{env}</button>
       <button type="button" class="chip mono" data-ins="{orig}" data-i18n-title="ph.orig">{orig}</button>
+      <button type="button" class="chip mono" data-ins="{parent}" data-i18n-title="ph.parent">{parent}</button>
     </div>
     <div class="opts">
       <label class="field"><span data-i18n="seq.start">Counter starts at</span><input id="seqStart" class="mono num" type="number" step="1" value="1"></label>
@@ -57,6 +51,40 @@
       <label class="check"><input id="optRecursive" type="checkbox"><span data-i18n="opt.recursive">Include subfolders</span></label>
       <label class="check"><input id="optAv" type="checkbox" checked><span data-i18n="opt.avonly">Folders: audio/video only</span></label>
     </div>
+    <div class="presets" role="group" aria-label="Presets">
+      <label class="field"><span data-i18n="preset.label">Preset</span><select id="presetSel"></select></label>
+      <button type="button" id="presetSave" class="btn btn--ghost" data-i18n="preset.save">Save preset…</button>
+      <button type="button" id="presetDel" class="btn btn--ghost" data-i18n="preset.delete" disabled>Delete</button>
+    </div>
+    <details class="tools" id="tools">
+      <summary><span data-i18n="tools.title">Find &amp; replace, clean up</span> <span class="badge" id="toolsBadge" hidden data-i18n="tools.on">on</span></summary>
+      <div class="tools__body">
+        <fieldset class="tools__grp">
+          <legend data-i18n="find.title">Find and replace</legend>
+          <label class="field"><span data-i18n="find.text">Find</span><input id="findText" class="mono" type="text" spellcheck="false" autocomplete="off" maxlength="200"></label>
+          <label class="field"><span data-i18n="find.replace">Replace with</span><input id="findRepl" class="mono" type="text" spellcheck="false" autocomplete="off" maxlength="200"></label>
+          <label class="check"><input id="findRegex" type="checkbox"><span data-i18n="find.regex">Regular expression</span></label>
+          <label class="check"><input id="findCase" type="checkbox"><span data-i18n="find.case">Match case</span></label>
+          <p class="hint" data-i18n="find.hint"></p>
+          <p class="warn" id="findWarn" hidden data-i18n="find.bad"></p>
+        </fieldset>
+        <fieldset class="tools__grp">
+          <legend data-i18n="clean.title">Clean up</legend>
+          <label class="field"><span data-i18n="clean.case">Letters</span>
+            <select id="cleanCase">
+              <option value="none" data-i18n="clean.case.none"></option><option value="lower" data-i18n="clean.case.lower"></option>
+              <option value="upper" data-i18n="clean.case.upper"></option><option value="title" data-i18n="clean.case.title"></option>
+            </select></label>
+          <label class="field"><span data-i18n="clean.spaces">Spaces</span>
+            <select id="cleanSpaces">
+              <option value="none" data-i18n="clean.spaces.none"></option><option value="underscore" data-i18n="clean.spaces.underscore"></option>
+              <option value="hyphen" data-i18n="clean.spaces.hyphen"></option>
+            </select></label>
+          <label class="check"><input id="cleanAccents" type="checkbox"><span data-i18n="clean.accents">Remove accents</span></label>
+          <label class="check"><input id="cleanSpecial" type="checkbox"><span data-i18n="clean.special">Remove special characters</span></label>
+        </fieldset>
+      </div>
+    </details>
   </section>
 
   <main class="list" id="listArea">
@@ -75,24 +103,20 @@
     </div>
     <div class="rows" id="rows"></div>
     <div class="empty" id="empty">
-      <p class="empty__title" data-i18n="empty.title">Drop files or folders here</p>
-      <p class="empty__text" data-i18n="empty.text">Nothing is renamed until you check the preview and confirm.</p>
+      <img class="empty__logo" src="logo.svg" alt="" width="72" height="72">
+      <p class="empty__title" data-i18n="welcome.title">Drop files or folders here</p>
+      <p class="empty__text" data-i18n="welcome.text">Nothing is renamed until you check the preview and confirm.</p>
     </div>
   </main>
-
-  <div class="update-banner" id="updBanner" hidden>
-    <span id="updBannerText"></span>
-    <button type="button" class="btn btn--small" id="updBannerBtn" data-i18n="ctl.update">Updates</button>
-  </div>
 
   <div class="bottom">
     <div class="actionbar">
       <div class="summary" id="summary" aria-live="polite"></div>
       <div class="actions">
-        <button type="button" id="addFilesBtn" class="btn btn--ghost" data-i18n="btn.addFiles">Add files…</button>
-        <button type="button" id="addFolderBtn" class="btn btn--ghost" data-i18n="btn.addFolder">Add folder…</button>
-        <button type="button" id="clearBtn" class="btn btn--ghost" data-i18n="btn.clear">Clear list</button>
-        <button type="button" id="undoBtn" class="btn btn--ghost" data-i18n="btn.undo" disabled>Undo last batch</button>
+        <button type="button" id="addFilesBtn" class="btn btn--ghost" data-icon="file" data-i18n="btn.addFiles">Add files…</button>
+        <button type="button" id="addFolderBtn" class="btn btn--ghost" data-icon="folder" data-i18n="btn.addFolder">Add folder…</button>
+        <button type="button" id="clearBtn" class="btn btn--ghost" data-icon="trash" data-i18n="btn.clear">Clear list</button>
+        <button type="button" id="undoBtn" class="btn btn--ghost" data-icon="undo" data-i18n="btn.undo" disabled>Undo last batch</button>
         <button type="button" id="renameBtn" class="btn btn--primary" disabled>Rename…</button>
       </div>
     </div>
@@ -100,8 +124,7 @@
       <span data-i18n="foot.by">Graziano Melzi · OnAir Garage</span><span aria-hidden="true">·</span>
       <a href="https://onairgarage.com" data-ext>onairgarage.com</a><span aria-hidden="true">·</span>
       <span data-i18n="foot.license">MIT License</span><span aria-hidden="true">·</span>
-      <span><span data-i18n="foot.contact">Contact</span>: hello@onairgarage.com</span><span aria-hidden="true">·</span>
-      <span id="ver" class="mono">v0.0.0</span>
+      <span><span data-i18n="foot.contact">Contact</span>: hello@onairgarage.com</span>
     </footer>
   </div>
 
@@ -135,17 +158,105 @@
     </div>
   </dialog>
 
-  <dialog id="updDlg" class="dlg">
-    <h2 data-i18n="ctl.update">Updates</h2>
-    <p id="updText"></p>
-    <div class="progress" id="updProgress" hidden><div class="progress__bar" id="updBar"></div></div>
-    <label class="check"><input id="updAuto" type="checkbox"><span data-i18n="upd.auto">Check for updates when the app starts</span></label>
+  <dialog id="setDlg" class="dlg dlg--wide">
+    <div class="dlg__head"><h2 data-i18n="set.title">Settings</h2><button type="button" class="btn btn--ghost" id="setClose" data-i18n="set.close">Close</button></div>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab" role="tab" data-tab="general" data-i18n="set.tab.general">General</button>
+      <button type="button" class="tab" role="tab" data-tab="updates" data-i18n="set.tab.updates">Updates</button>
+      <button type="button" class="tab" role="tab" data-tab="backup" data-i18n="set.tab.backup">Backup</button>
+      <button type="button" class="tab" role="tab" data-tab="about" data-i18n="set.tab.about">Help &amp; About</button>
+    </div>
+    <div class="dlg__body">
+      <section class="panel" data-panel="general">
+        <label class="field field--col"><span class="ctl__label" data-i18n="ctl.language">Language</span><select id="langSel"></select></label>
+        <label class="field field--col"><span class="ctl__label" data-i18n="ctl.theme">Theme</span>
+          <select id="themeSel">
+            <option value="auto" data-i18n="theme.auto">Auto</option>
+            <option value="light" data-i18n="theme.light">Light</option>
+            <option value="dark" data-i18n="theme.dark">Dark</option>
+          </select>
+        </label>
+      </section>
+      <section class="panel" data-panel="updates" hidden>
+        <label class="check"><input id="updAuto" type="checkbox"><span data-i18n="upd.auto">Check for updates</span></label>
+        <div class="update-panel" id="updPanel"></div>
+        <p class="hint" id="updLast"></p>
+        <div class="row-actions"><button type="button" class="btn btn--ghost" id="updCheck" data-i18n="upd.checkNow">Check now</button></div>
+        <p class="hint" data-i18n="upd.nothing"></p>
+      </section>
+      <section class="panel" data-panel="backup" hidden>
+        <h3 data-i18n="bk.title">Configuration backup</h3>
+        <p data-i18n="bk.note"></p>
+        <p class="hint" data-i18n="bk.noSecrets"></p>
+        <div class="row-actions">
+          <button type="button" class="btn btn--ghost" id="bkExport" data-i18n="bk.export">Export</button>
+          <button type="button" class="btn btn--ghost" id="bkImport" data-i18n="bk.import">Import</button>
+        </div>
+        <p class="hint" id="bkResult" aria-live="polite"></p>
+      </section>
+      <section class="panel" data-panel="about" hidden>
+        <div class="about__head"><img src="logo.svg" alt="" width="56" height="56"><div><h3>File Renamer</h3><p class="hint mono" id="aboutVer"></p></div></div>
+        <dl class="about">
+          <dt data-i18n="ab.version">Version</dt><dd class="mono" id="abVersion"></dd>
+          <dt data-i18n="ab.system">System</dt><dd class="mono" id="abSystem"></dd>
+          <dt data-i18n="ab.license">License</dt><dd data-i18n="ab.licenseText"></dd>
+          <dt data-i18n="ab.credits">Credits</dt><dd data-i18n="ab.creditsText"></dd>
+          <dt data-i18n="ab.links">Links</dt>
+          <dd class="about__links">
+            <a href="https://onairgarage.com/tools/file-renamer/" data-ext data-i18n="ab.toolPage">Tool page</a>
+            <a href="https://github.com/djgragra/file-renamer/releases" data-ext data-i18n="ab.releases">Releases</a>
+            <a href="#" id="abManual" data-i18n="ab.howItWorks">How it works</a>
+            <span><span data-i18n="ab.contact">Contact</span>: hello@onairgarage.com</span>
+          </dd>
+        </dl>
+        <h4 data-i18n="ab.privacyTitle">What the app contacts</h4>
+        <p class="hint" data-i18n="help.pPriv"></p>
+        <p class="hint" data-i18n="ab.unsigned"></p>
+        <div class="row-actions">
+          <button type="button" class="btn btn--ghost" id="abCopy" data-i18n="ab.copy">Copy info for support</button>
+          <button type="button" class="btn btn--ghost" id="abLogs" data-i18n="ab.logs">Open logs folder</button>
+          <button type="button" class="btn btn--ghost" id="abCheck" data-i18n="ab.check">Check for updates</button>
+        </div>
+        <p class="hint" id="abResult" aria-live="polite"></p>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="presetDlg" class="dlg">
+    <h2 data-i18n="preset.saveTitle">Save preset</h2>
+    <label class="field field--col"><span class="ctl__label" data-i18n="preset.name">Name of the preset</span><input id="presetName" type="text" maxlength="60" autocomplete="off"></label>
+    <p class="hint" id="presetHint"></p>
     <div class="dlg__actions">
-      <button type="button" class="btn btn--ghost" id="updCheck" data-i18n="upd.check">Check for updates</button>
-      <button type="button" class="btn btn--ghost" id="updPage" hidden data-i18n="upd.page">Release page</button>
-      <button type="button" class="btn btn--primary" id="updDownload" hidden data-i18n="upd.download">Download</button>
-      <button type="button" class="btn btn--primary" id="updShow" hidden data-i18n="upd.show">Show file</button>
-      <button type="button" class="btn btn--ghost" id="updClose" data-i18n="upd.close">Close</button>
+      <button type="button" class="btn btn--ghost" id="presetCancel" data-i18n="confirm.cancel">Cancel</button>
+      <button type="button" class="btn btn--primary" id="presetOk" data-i18n="preset.saveOk">Save</button>
+    </div>
+  </dialog>
+
+  <dialog id="askDlg" class="dlg">
+    <h2 id="askTitle"></h2>
+    <p id="askText"></p>
+    <div class="dlg__actions">
+      <button type="button" class="btn btn--ghost" id="askCancel" data-i18n="confirm.cancel">Cancel</button>
+      <button type="button" class="btn btn--primary" id="askOk"></button>
+    </div>
+  </dialog>
+
+  <dialog id="importDlg" class="dlg">
+    <h2 data-i18n="bk.importTitle">Import backup</h2>
+    <p id="importText"></p>
+    <div class="choices">
+      <button type="button" class="btn btn--choice" id="importReplace"><b data-i18n="bk.replace"></b><span data-i18n="bk.replaceDesc"></span></button>
+      <button type="button" class="btn btn--choice" id="importAdd"><b data-i18n="bk.add"></b><span data-i18n="bk.addDesc"></span></button>
+    </div>
+    <div class="dlg__actions"><button type="button" class="btn btn--ghost" id="importCancel" data-i18n="confirm.cancel">Cancel</button></div>
+  </dialog>
+
+  <dialog id="newsDlg" class="dlg">
+    <h2 id="newsTitle"></h2>
+    <div id="newsBody" class="news"></div>
+    <div class="dlg__actions">
+      <button type="button" class="btn btn--ghost" id="newsNotes" data-i18n="upd.notes">Release notes</button>
+      <button type="button" class="btn btn--primary" id="newsOk" data-i18n="wn.ok">OK</button>
     </div>
   </dialog>
 
@@ -156,7 +267,7 @@
       <p data-i18n="help.pWhat"></p>
       <h3 data-i18n="help.hUse">How to use it</h3>
       <ol>
-        <li data-i18n="help.u1"></li><li data-i18n="help.u2"></li><li data-i18n="help.u3"></li><li data-i18n="help.u4"></li><li data-i18n="help.u5"></li>
+        <li data-i18n="help.u1"></li><li data-i18n="help.u2"></li><li data-i18n="help.u3"></li><li data-i18n="help.u4"></li><li data-i18n="help.u5"></li><li data-i18n="help.u6"></li>
       </ol>
       <h3 data-i18n="help.hPh">Placeholders</h3>
       <p data-i18n="help.phIntro"></p>
@@ -169,9 +280,14 @@
         <li><code>{rand}</code> <code>{rand:N}</code> — <span data-i18n="help.ph.rand"></span></li>
         <li><code>{env:NAME}</code> — <span data-i18n="help.ph.env"></span></li>
         <li><code>{orig}</code> — <span data-i18n="help.ph.orig"></span></li>
+        <li><code>{parent}</code> — <span data-i18n="help.ph.parent"></span></li>
       </ul>
       <p data-i18n="help.phFmt"></p>
       <p data-i18n="help.phNow"></p>
+      <h3 data-i18n="help.hTools">Find &amp; replace, clean up</h3>
+      <p data-i18n="help.pTools"></p>
+      <h3 data-i18n="help.hPresets">Presets</h3>
+      <p data-i18n="help.pPresets"></p>
       <h3 data-i18n="help.hSafe">Safety</h3>
       <ul><li data-i18n="help.s1"></li><li data-i18n="help.s2"></li><li data-i18n="help.s3"></li><li data-i18n="help.s4"></li><li data-i18n="help.s5"></li></ul>
       <h3 data-i18n="help.hVal">Validation</h3>

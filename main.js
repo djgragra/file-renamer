@@ -1,10 +1,16 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain, dialog, nativeTheme, shell, net, clipboard } from 'electron';
 import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { AV_EXTENSIONS, buildPlan, sanitizeBase, isReservedName, MAX_NAME_LENGTH } from './src/planner.js';
 import { applyRenames, buildLog, checkUndo } from './src/renamer.js';
-import { checkForUpdate, downloadInstaller } from './src/updater.js';
+import { checkForUpdate, downloadInstaller, bannerState, remindLaterState, skipVersionState, makeSafetyCopy, installPlan, whatsNew, startupKind } from './src/updater.js';
+import { createStore } from './src/settings.js';
+import { buildExport, prepareImport, backupFileName, MAX_BACKUP_BYTES } from './src/backup.js';
+import { createLogger } from './src/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAX_FILES = 20000;
@@ -14,6 +20,17 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 let mainWindow = null;
 let lastUpdateInfo = null;
+let store = null;
+let logger = null;
+let busyOps = 0; // renames / undos in progress: "Close and install" is refused while this is above 0
+let downloadedFile = null;
+let downloadedFor = null;
+let downloadAbort = null;
+let pendingImport = null;
+let startKind = 'same';
+
+const settings = () => store.get();
+const send = (channel, ...args) => mainWindow?.webContents.send(channel, ...args);
 
 const undoFile = () => path.join(app.getPath('userData'), 'last-batch.json');
 
@@ -52,6 +69,11 @@ function buildMenu() {
 }
 
 app.whenReady().then(() => {
+  store = createStore({ file: path.join(app.getPath('userData'), 'settings.json') });
+  logger = createLogger({ dir: path.join(app.getPath('userData'), 'logs'), retentionDays: 7 });
+  logger.prune();
+  logger.log('info', `File Renamer ${app.getVersion()} started (${process.platform} ${process.arch})`);
+  announceStartup();
   buildMenu();
   createWindow();
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
@@ -60,6 +82,8 @@ app.on('second-instance', () => {
   if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
 });
 app.on('window-all-closed', () => app.quit());
+process.on('uncaughtException', (err) => { logger?.log('error', `uncaught: ${err.message}`); });
+process.on('unhandledRejection', (err) => { logger?.log('error', `unhandled: ${err?.message || err}`); });
 
 // ---- Files ----------------------------------------------------------------------------------
 
@@ -131,6 +155,8 @@ ipcMain.handle('plan:build', (_e, files, opts = {}) => {
     seqStart: Number(opts.seqStart),
     seqStep: Number(opts.seqStep),
     seed: Number(opts.seed) || 1,
+    find: opts.find,
+    clean: opts.clean,
     now: new Date(),
     env: process.env
   });
@@ -157,8 +183,15 @@ ipcMain.handle('rename:apply', async (_e, items) => {
     pairs.push({ from: it.path, to: path.join(path.dirname(it.path), it.newName) });
     index.push(i);
   });
-  const done = await applyRenames(pairs);
+  busyOps++;
+  let done;
+  try {
+    done = await applyRenames(pairs);
+  } finally {
+    busyOps--;
+  }
   done.forEach((r, k) => { results[index[k]] = r; });
+  logger.log('info', `rename: ${done.filter((r) => r.ok).length} renamed, ${results.filter((r) => r && !r.ok).length} failed`);
   const log = await buildLog(results.filter(Boolean));
   if (log.entries.length) await fsp.writeFile(undoFile(), JSON.stringify(log), 'utf8').catch(() => {});
   return results;
@@ -189,7 +222,14 @@ ipcMain.handle('undo:run', async () => {
   const log = await readLog();
   if (!log) return { results: [] };
   const { runnable, problems } = await checkUndo(log);
-  const results = await applyRenames(runnable);
+  busyOps++;
+  let results;
+  try {
+    results = await applyRenames(runnable);
+  } finally {
+    busyOps--;
+  }
+  logger.log('info', `undo: ${results.filter((r) => r.ok).length} restored, ${problems.length} skipped`);
   // Keep in the log only the entries that were not restored, so a second try can finish the job.
   const restored = new Set(results.filter((r) => r.ok).map((r) => r.from));
   const rest = log.entries.filter((e) => !restored.has(e.to));
@@ -198,32 +238,177 @@ ipcMain.handle('undo:run', async () => {
   return { results, problems: problems.map((p) => ({ from: p.entry.from, to: p.entry.to, error: p.error })) };
 });
 
-// ---- App, updates ---------------------------------------------------------------------------
+// ---- App, settings ----------------------------------------------------------------------------
 
-ipcMain.handle('app:info', () => ({ version: app.getVersion(), platform: process.platform }));
+ipcMain.handle('app:info', () => ({
+  version: app.getVersion(),
+  platform: process.platform,
+  arch: process.arch,
+  logsDir: path.join(app.getPath('userData'), 'logs')
+}));
+
+ipcMain.handle('settings:get', () => settings());
+ipcMain.handle('settings:update', (_e, patch) => store.update(patch));
 
 ipcMain.handle('open-external', (_e, url) => {
   if (typeof url === 'string' && EXTERNAL_OK.test(url)) shell.openExternal(url);
 });
 
-ipcMain.handle('update:check', async () => {
-  const info = await checkForUpdate();
-  lastUpdateInfo = info.ok ? info : null;
-  return { ...info, installer: info.installer ? { name: info.installer.name, size: info.installer.size } : null };
+ipcMain.handle('logs:open-folder', () => shell.openPath(path.join(app.getPath('userData'), 'logs')));
+
+// Help & About: what to send to whoever helps. Never settings values, file names or folders the user chose.
+function supportInfo() {
+  const s = settings();
+  const u = s.updateState.lastCheck;
+  const lastError = logger.entries().filter((e) => e.level === 'error').at(-1);
+  const home = os.homedir();
+  const tidy = (v) => String(v || '').split(home).join('~');
+  return [
+    `File Renamer ${app.getVersion()}`,
+    `Electron ${process.versions.electron} · Chrome ${process.versions.chrome} · Node ${process.versions.node}`,
+    `System: ${process.platform} ${os.release()} ${process.arch}`,
+    `Language: ${s.language} · Theme: ${s.theme}`,
+    `Presets: ${s.presets.length}`,
+    `Last update check: ${u ? `${new Date(u.at).toISOString()} (${u.ok ? 'ok' : tidy(u.error || 'failed')})` : 'never'}`,
+    `Last error: ${lastError ? `${new Date(lastError.t).toISOString()} ${tidy(lastError.message).slice(0, 160)}` : 'none'}`
+  ].join('\n');
+}
+ipcMain.handle('app:copy-support-info', () => {
+  const text = supportInfo();
+  clipboard.writeText(text);
+  return text;
 });
 
-ipcMain.handle('update:download', async () => {
-  if (!lastUpdateInfo?.available) return { ok: false, error: 'no-update' };
+// ---- Backup (apps/COMMON-FEATURES.md, section 3) ----------------------------------------------
+
+ipcMain.handle('backup:export', async () => {
+  const res = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: path.join(app.getPath('documents'), backupFileName()),
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  });
+  if (res.canceled || !res.filePath) return { ok: false, cancelled: true };
   try {
-    const file = await downloadInstaller(lastUpdateInfo, app.getPath('downloads'), (received, total) => {
-      mainWindow?.webContents.send('update:progress', received, total);
-    });
-    return { ok: true, file };
+    await fsp.writeFile(res.filePath, JSON.stringify(buildExport(settings()), null, 1), 'utf8');
+    logger.log('info', 'backup exported');
+    return { ok: true, file: path.basename(res.filePath) };
+  } catch (err) {
+    logger.log('error', `backup export failed: ${err.message}`);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('backup:import-pick', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+  if (res.canceled || !res.filePaths[0]) return { ok: false, cancelled: true };
+  try {
+    const st = await fsp.stat(res.filePaths[0]);
+    if (st.size > MAX_BACKUP_BYTES) return { ok: false, error: 'too-big' };
+    const raw = await fsp.readFile(res.filePaths[0], 'utf8');
+    const plan = prepareImport(raw, settings());
+    if (!plan.ok) return { ok: false, error: plan.error };
+    pendingImport = raw;
+    const have = new Set(settings().presets.map((p) => p.id));
+    return { ok: true, presets: plan.settings.presets.length, newPresets: plan.settings.presets.filter((p) => !have.has(p.id)).length };
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
 
-ipcMain.handle('update:reveal', (_e, file) => {
-  if (typeof file === 'string' && path.dirname(file) === app.getPath('downloads')) shell.showItemInFolder(file);
+ipcMain.handle('backup:import-apply', (_e, mode) => {
+  if (!pendingImport) return { ok: false, error: 'invalid' };
+  const plan = prepareImport(pendingImport, settings(), { mode: mode === 'add' ? 'add' : 'replace' });
+  pendingImport = null;
+  if (!plan.ok) return { ok: false, error: plan.error };
+  const next = store.replace(plan.settings);
+  logger.log('info', `backup imported (${plan.mode})`);
+  return { ok: true, settings: next, added: plan.added, missing: plan.missing };
 });
+
+ipcMain.handle('backup:import-cancel', () => { pendingImport = null; return true; });
+
+// ---- Guided update (apps/COMMON-FEATURES.md, section 4) ----------------------------------------
+
+// what the page may know: the installer's name and size, never a URL
+const publicInfo = (info) => info && { ...info, installer: info.installer ? { name: info.installer.name, size: info.installer.size } : null, sumsUrl: undefined };
+const updateView = (info) => ({
+  info: publicInfo(info),
+  banner: bannerState(info, settings().updateState),
+  lastCheck: settings().updateState.lastCheck,
+  downloaded: downloadedFile && info?.available ? path.basename(downloadedFile) : null
+});
+const setUpdateState = (patch) => store.update({ updateState: { ...settings().updateState, ...patch } });
+
+ipcMain.handle('update:check', async () => {
+  const info = await checkForUpdate({ current: app.getVersion(), fetchFn: net.fetch });
+  lastUpdateInfo = info.ok ? info : null;
+  if (downloadedFor && (!info.ok || info.latest !== downloadedFor)) { downloadedFile = null; downloadedFor = null; } // a newer release came out: download again
+  setUpdateState({ lastCheck: { at: Date.now(), ok: !!info.ok, error: info.ok ? '' : String(info.error || '') } });
+  return updateView(info);
+});
+
+ipcMain.handle('update:download', async () => {
+  if (!lastUpdateInfo?.available) return { ok: false, error: 'no-update' };
+  if (downloadAbort) return { ok: false, error: 'busy' };
+  downloadAbort = new AbortController();
+  try {
+    downloadedFile = await downloadInstaller({
+      info: lastUpdateInfo,
+      dir: app.getPath('downloads'),
+      fetchFn: net.fetch,
+      current: app.getVersion(),
+      signal: downloadAbort.signal,
+      onProgress: (received, total) => send('update:progress', received, total)
+    });
+    downloadedFor = lastUpdateInfo.latest;
+    logger.log('info', `update ${lastUpdateInfo.latest} downloaded and verified (SHA-256)`);
+    return { ok: true, file: path.basename(downloadedFile) };
+  } catch (err) {
+    downloadedFile = null;
+    downloadedFor = null;
+    const cancelled = downloadAbort?.signal.aborted;
+    if (!cancelled) logger.log('warn', `update download failed: ${err.message}`);
+    return { ok: false, error: cancelled ? 'cancelled' : err.message };
+  } finally {
+    downloadAbort = null;
+  }
+});
+ipcMain.handle('update:cancel', () => { downloadAbort?.abort(); return true; });
+
+ipcMain.handle('update:remind', () => { setUpdateState(remindLaterState(settings().updateState)); return updateView(lastUpdateInfo); });
+ipcMain.handle('update:skip', () => { setUpdateState(skipVersionState(settings().updateState, lastUpdateInfo?.latest)); return updateView(lastUpdateInfo); });
+
+// "Close and install": refused while a rename is in progress; a safety copy of the settings first
+ipcMain.handle('update:install', () => {
+  if (!downloadedFile || !fs.existsSync(downloadedFile)) return { ok: false, error: 'no-file' };
+  if (busyOps > 0) return { ok: false, error: 'busy' };
+  try {
+    makeSafetyCopy({ file: store.file, dir: path.join(app.getPath('userData'), 'backups'), version: lastUpdateInfo?.current || app.getVersion() });
+  } catch (err) {
+    return { ok: false, error: `safety copy: ${err.message}` };
+  }
+  const plan = installPlan(process.platform, downloadedFile);
+  logger.log('info', `installing update ${lastUpdateInfo?.latest || ''} (${plan.kind})`);
+  if (plan.kind === 'run-installer') {
+    spawn(plan.file, [], { detached: true, stdio: 'ignore' }).unref();
+    setTimeout(() => app.quit(), 300);
+  } else if (plan.kind === 'open-image') shell.openPath(plan.file);
+  else shell.showItemInFolder(plan.file);
+  return { ok: true, kind: plan.kind, hint: plan.hint || null, quit: plan.quit };
+});
+
+ipcMain.handle('update:reveal', () => {
+  if (downloadedFile && fs.existsSync(downloadedFile)) shell.showItemInFolder(downloadedFile);
+});
+
+// After a start of a newer version: the window with what changed, once
+function announceStartup() {
+  startKind = startupKind(settings().lastSeenVersion, app.getVersion(), store.hadFile());
+  if (startKind === 'first') store.update({ lastSeenVersion: app.getVersion() });
+}
+ipcMain.handle('whatsnew:get', () => {
+  if (startKind !== 'updated') return null;
+  let text = '';
+  try { text = fs.readFileSync(path.join(__dirname, 'CHANGELOG.md'), 'utf8'); } catch { /* not packaged */ }
+  return whatsNew(text, app.getVersion()) || { version: app.getVersion(), date: '', bullets: [] };
+});
+ipcMain.handle('whatsnew:seen', () => { startKind = 'same'; store.update({ lastSeenVersion: app.getVersion() }); return true; });
