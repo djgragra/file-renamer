@@ -1,3 +1,4 @@
+// garage-common: logger 1
 // Log: a ring buffer for the UI plus one file per day (logs/file-renamer_dd-mm-yyyy.log).
 import fs from 'node:fs';
 import path from 'node:path';
