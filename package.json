@@ -1,6 +1,6 @@
 {
   "name": "file-renamer",
-  "version": "26.10.1",
+  "version": "26.10.2",
   "description": "Batch renamer for audio and video files with placeholder patterns, mandatory preview and undo",
   "main": "main.js",
   "type": "module",
@@ -33,6 +33,7 @@
       "src/**/*",
       "renderer/**/*",
       "assets/**/*",
+      "CHANGELOG.md",
       "package.json"
     ],
     "directories": {

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { resolveTemplate, makeRng } from './pattern.js';
+import { prepareTransform } from './text-tools.js';
 
 // Extensions offered by the file dialog and used when scanning folders. This is a convenience
 // filter (common audio/video containers), not a list from a standard; files dropped one by one
@@ -49,10 +50,10 @@ async function lstatOrNull(p) {
 }
 
 // files: [{ path, selected }] in list order.
-// opts:  { pattern, seqStart, seqStep, seed, now, env }
+// opts:  { pattern, seqStart, seqStep, seed, now, env, find, clean }  (find / clean: see text-tools.js)
 // Returns one row per file: { path, dir, name, newName, status, reasons, notes }
 //   status: ok | unchanged | skipped | error
-//   reasons (error): empty, reserved, too-long, duplicate, exists
+//   reasons (error): empty, reserved, too-long, duplicate, exists, bad-regex
 //   notes: sanitized, case-only, chain
 export async function buildPlan(files, opts) {
   const now = opts.now instanceof Date ? opts.now : new Date();
@@ -71,14 +72,17 @@ export async function buildPlan(files, opts) {
     if (row.status === 'ok') row.sourceStat = await lstatOrNull(row.path);
   }
 
+  const transform = prepareTransform({ find: opts.find, clean: opts.clean });
+
   let k = 0;
   rows.forEach((row, i) => {
     if (row.status !== 'ok') return;
+    if (!transform.ok) { row.reasons.push(transform.error); return; } // invalid regular expression: nothing is renamed
     const { base, ext } = splitName(row.name);
     const rng = makeRng(((opts.seed >>> 0) + Math.imul(i + 1, 2654435761)) >>> 0);
-    const resolved = resolveTemplate(pattern, { now, mtime: row.sourceStat ? new Date(Number(row.sourceStat.mtimeMs)) : undefined, seq: seqStart + k * seqStep, orig: base, rng, env: opts.env });
+    const resolved = resolveTemplate(pattern, { now, mtime: row.sourceStat ? new Date(Number(row.sourceStat.mtimeMs)) : undefined, seq: seqStart + k * seqStep, orig: base, parent: path.basename(row.dir), rng, env: opts.env });
     k++;
-    const clean = sanitizeBase(resolved);
+    const clean = sanitizeBase(transform.run(resolved));
     if (clean.changed) row.notes.push('sanitized');
     if (!clean.value) { row.reasons.push('empty'); return; }
     row.newName = clean.value + ext;
