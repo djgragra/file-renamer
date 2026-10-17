@@ -80,7 +80,7 @@ Results as of 2026-10-13 on Linux (a cloud container, Node 22, Electron under a 
 | `dev/guided.test.js` (fake GitHub) | release lookup, installer of this system, foreign URLs never followed, SHA-256 check, interrupted download, remind later / skip, safety copy, install plan, what's new from the packaged CHANGELOG | 5 tests pass (Linux) | `npm test` |
 | `dev/e2e-electron.mjs` (real app, DevTools protocol) | preload + IPC: folder scan with filter, plan with `{env}`, rename on disk, refusal of invalid names, undo, find / clean / `{parent}`, settings file, Settings dialog and its tabs, support info without file names, logs without file names | passes (Linux, virtual screen) | `node dev/e2e-electron.mjs` (on a server: `FR_E2E_NO_SANDBOX=1 xvfb-run -a node dev/e2e-electron.mjs`) |
 
-**Not validated:** Windows, Linux, exFAT/FAT and network drives (hard-link fallback path); case-sensitive APFS volumes; very long names on each file system; installers, *Close and install* (installer start and restart on Windows, disk image on macOS, AppImage on Linux), the interface on Windows and macOS, auto-update and drag & drop from the file manager on real machines (to be tried by hand); no independent implementation was used for the date formatter.
+**Not validated:** Linux on a real desktop (the AppImage and its *Close and install*); exFAT/FAT and network drives (hard-link fallback path); case-sensitive APFS volumes; very long names on each file system. Windows and macOS (installers, *Close and install*, the interface, auto-update, drag & drop from the file manager) have been tried by hand by the author (declared 17 October 2026); no independent implementation was used for the date formatter.
 
 ## Sources to re-check
 
