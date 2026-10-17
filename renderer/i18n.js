@@ -261,6 +261,8 @@
       "ab.logs": "Open logs folder",
       "ab.check": "Check for updates",
       "ab.unsigned": "The installers are not signed with a developer certificate. The first time, Windows SmartScreen may say “Windows protected your PC” (More info → Run anyway) and macOS may refuse to open the app (right-click → Open). This is expected for a free, unsigned app.",
+      "ab.tipText": "Useful to you? A coffee for the mechanics is always welcome.",
+      "ab.tipBtn": "Tip jar",
       "help.u6": "Optional: use “Find & replace, clean up” to remove text, change case or tidy spaces and accents. Save the whole setup as a preset.",
       "help.hTools": "Find & replace, clean up",
       "help.pTools": "After the pattern is resolved, the new name goes through two optional steps. Find and replace works on plain text or on a regular expression (JavaScript syntax; $1 in “Replace with” is the first group); an empty “Replace with” removes the text. Clean up can remove accents and special characters (it keeps letters, digits, space and _ - .), change the case (lowercase, UPPERCASE, Title Case) and replace spaces with _ or -. The result still goes through the safety rules below.",
@@ -531,6 +533,8 @@
       "ab.logs": "Apri cartella log",
       "ab.check": "Controlla aggiornamenti",
       "ab.unsigned": "Gli installer non sono firmati con un certificato di sviluppatore. La prima volta Windows SmartScreen può dire “Windows ha protetto il PC” (Ulteriori informazioni → Esegui comunque) e macOS può rifiutarsi di aprire l'app (clic destro → Apri). È normale per un'app gratuita e non firmata.",
+      "ab.tipText": "Ti è utile? Un caffè per i meccanici è sempre ben accetto.",
+      "ab.tipBtn": "Salvadanaio",
       "help.u6": "Facoltativo: con “Cerca e sostituisci, pulizia” puoi togliere testo, cambiare maiuscole/minuscole o sistemare spazi e accenti. Salva l'insieme come preset.",
       "help.hTools": "Cerca e sostituisci, pulizia",
       "help.pTools": "Dopo che il modello è stato risolto, il nuovo nome passa per due passi facoltativi. Cerca e sostituisci lavora su testo semplice o su un'espressione regolare (sintassi JavaScript; $1 in “Sostituisci con” è il primo gruppo); “Sostituisci con” vuoto elimina il testo. La pulizia può togliere accenti e caratteri speciali (restano lettere, cifre, spazio e _ - .), cambiare maiuscole/minuscole (minuscolo, MAIUSCOLO, Iniziali Maiuscole) e sostituire gli spazi con _ o -. Il risultato passa comunque per le regole di sicurezza qui sotto.",
@@ -801,6 +805,8 @@
       "ab.logs": "Abrir carpeta de registros",
       "ab.check": "Buscar actualizaciones",
       "ab.unsigned": "Los instaladores no están firmados con un certificado de desarrollador. La primera vez, Windows SmartScreen puede decir “Windows protegió su PC” (Más información → Ejecutar de todas formas) y macOS puede negarse a abrir la app (clic derecho → Abrir). Es normal en una app gratuita y sin firmar.",
+      "ab.tipText": "¿Te resulta útil? Un café para los mecánicos siempre es bienvenido.",
+      "ab.tipBtn": "Hucha",
       "help.u6": "Opcional: con “Buscar y reemplazar, limpieza” puedes quitar texto, cambiar mayúsculas o arreglar espacios y acentos. Guarda todo como preset.",
       "help.hTools": "Buscar y reemplazar, limpieza",
       "help.pTools": "Una vez resuelto el patrón, el nombre nuevo pasa por dos pasos opcionales. Buscar y reemplazar funciona con texto simple o con una expresión regular (sintaxis JavaScript; $1 en “Reemplazar por” es el primer grupo); “Reemplazar por” vacío quita el texto. La limpieza puede quitar acentos y caracteres especiales (se mantienen letras, cifras, espacio y _ - .), cambiar mayúsculas (minúsculas, MAYÚSCULAS, Primeras Mayúsculas) y cambiar los espacios por _ o -. El resultado pasa igualmente por las reglas de seguridad de abajo.",
@@ -829,5 +835,9 @@
     };
   }
 
-  root.I18N = { STRINGS: STRINGS, LANGS: LANGS, make: make };
+  // The site page the tip button opens in the browser, in the language of the app.
+  var TIP_URLS = { en: "https://onairgarage.com/support/", it: "https://onairgarage.com/it/support/", es: "https://onairgarage.com/es/support/" };
+  function tipUrl(lang) { return TIP_URLS[lang] || TIP_URLS.en; }
+
+  root.I18N = { STRINGS: STRINGS, LANGS: LANGS, make: make, tipUrl: tipUrl };
 })(typeof window !== "undefined" ? window : globalThis);

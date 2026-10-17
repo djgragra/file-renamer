@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { AV_EXTENSIONS, buildPlan, sanitizeBase, isReservedName, MAX_NAME_LENGTH } from './src/planner.js';
 import { applyRenames, buildLog, checkUndo } from './src/renamer.js';
-import { checkForUpdate, downloadInstaller, bannerState, remindLaterState, skipVersionState, makeSafetyCopy, installPlan, whatsNew, startupKind } from './src/updater.js';
+import { checkForUpdate, downloadInstaller, sweepPartials, bannerState, remindLaterState, skipVersionState, makeSafetyCopy, installPlan, whatsNew, startupKind } from './src/updater.js';
 import { createStore } from './src/settings.js';
 import { buildExport, prepareImport, backupFileName, MAX_BACKUP_BYTES } from './src/backup.js';
 import { createLogger } from './src/logger.js';
@@ -73,6 +73,8 @@ app.whenReady().then(() => {
   logger = createLogger({ dir: path.join(app.getPath('userData'), 'logs'), retentionDays: 7 });
   logger.prune();
   logger.log('info', `File Renamer ${app.getVersion()} started (${process.platform} ${process.arch})`);
+  const stale = sweepPartials(app.getPath('downloads'));
+  if (stale.length) logger.log('info', `removed ${stale.length} unfinished installer download(s) left by an earlier run`);
   announceStartup();
   buildMenu();
   createWindow();
@@ -349,6 +351,7 @@ ipcMain.handle('update:check', async () => {
 ipcMain.handle('update:download', async () => {
   if (!lastUpdateInfo?.available) return { ok: false, error: 'no-update' };
   if (downloadAbort) return { ok: false, error: 'busy' };
+  sweepPartials(app.getPath('downloads')); // a .part left by a download that was cut off earlier goes first
   downloadAbort = new AbortController();
   try {
     downloadedFile = await downloadInstaller({

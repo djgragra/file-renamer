@@ -1,6 +1,6 @@
 {
   "name": "file-renamer",
-  "version": "26.10.2",
+  "version": "26.10.3",
   "description": "Batch renamer for audio and video files with placeholder patterns, mandatory preview and undo",
   "main": "main.js",
   "type": "module",
@@ -20,7 +20,7 @@
     "dist:linux": "electron-builder --linux"
   },
   "devDependencies": {
-    "electron": "^44.4.3",
+    "electron": "^44.9.0",
     "electron-builder": "^26.15.3"
   },
   "build": {

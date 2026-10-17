@@ -727,13 +727,14 @@
   // help & about
   $("abManual").addEventListener("click", function (e) { e.preventDefault(); closeDlg("setDlg"); openDlg("helpDlg"); });
   $("abCopy").addEventListener("click", function () { api.copySupportInfo().then(function () { $("abResult").textContent = t("ab.copied"); }); });
+  $("abTip").addEventListener("click", function (e) { e.preventDefault(); api.openExternal(I18N.tipUrl(lang)); });
   $("abLogs").addEventListener("click", function () { api.openLogs(); });
   $("abCheck").addEventListener("click", function () { showTab("updates"); checkUpdates(true); });
 
   // ---- Help and external links -------------------------------------------------------------
   $("helpBtn").addEventListener("click", function () { openDlg("helpDlg"); });
   $("helpClose").addEventListener("click", function () { closeDlg("helpDlg"); });
-  document.querySelectorAll("a[data-ext]").forEach(function (a) {
+  document.querySelectorAll("a[data-ext]:not(#abTip)").forEach(function (a) {
     a.addEventListener("click", function (e) {
       e.preventDefault();
       if (/^https:/.test(a.href)) api.openExternal(a.href);

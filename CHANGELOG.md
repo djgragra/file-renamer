@@ -1,5 +1,12 @@
 # Changelog
 
+## 26.10.3 — 2026-10-17
+
+- **Guided update, cleaner interrupted downloads** (shared updater, version 2): a download that is cut off, cancelled, stalls for a minute or ends with a failed rename no longer leaves an unfinished installer (`.part`) in the Downloads folder, and the ones an earlier run left are removed when the app starts.
+- **Tip line** in Settings → Help & About: a small box with a tip jar and one line with a link to the tip page of onairgarage.com, in the language of the app. Nothing appears in the main window and nothing repeats.
+- Electron updated to 44.9.0 and the build tools to their latest compatible versions.
+- Tests: 56 in all (new ones for the interrupted downloads and the tip line).
+
 ## 26.10.2 — 2026-10-13
 
 - **Find and replace, clean up** (new, optional, in the pattern area): find text or a regular expression in the new name and replace it (an empty "Replace with" removes the text); clean up accents, special characters, upper/lower/Title Case and spaces (to `_` or `-`). The result still goes through the safety rules and the preview.
