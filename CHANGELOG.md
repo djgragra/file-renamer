@@ -1,5 +1,17 @@
 # Changelog
 
+## 26.10.4 — 2026-10-23
+
+- **Fix: macOS on Apple Silicon said the app was "damaged".** The Apple Silicon build had a signature that was no longer valid (macOS: "code has no resources but signature indicates they must be present"), and recent macOS versions refuse such an app instead of offering to open it. The app is now signed ad hoc during the build (no Apple account is needed) and the build checks the signature of the app inside each disk image. The first start still shows the usual "unidentified developer" notice: System Settings → Privacy & Security → Open Anyway. If you already downloaded an earlier version and it will not open, run in Terminal: `xattr -cr "/Applications/File Renamer.app" && codesign --force --deep -s - "/Applications/File Renamer.app"`.
+- **Tags and file values in the new name**: `{artist}` and `{title}` (the tags written in the file), `{duration}` (seconds; `{duration:mmss}` gives `0307`, `{duration:hhmmss}` gives `000307`), `{bitrate}` (kbit/s) and `{samplerate}` (Hz). They are read from the files on your computer, only when the pattern uses one of them, for MP3, FLAC, WAV/BWF, AIFF, M4A/MP4, Ogg/Opus and the other common formats. A file without the tag gets an empty value and its row says "tag missing". Characters a file name cannot hold are replaced as always.
+- **Extension**: keep it, write it in lowercase or UPPERCASE, or replace it with another one (Find & replace, clean up, extension). Only the name changes: the file is not converted. The extension is part of presets and of the backup.
+- **Save log (CSV)**: after a rename, Save log… writes old name, new name, folder, result and time of the batch (the files that failed too) to a CSV file for Excel, Numbers or LibreOffice.
+- **Copy preview**: copies the lines "old name → new name" of the files that would be renamed to the clipboard.
+- **Undo several batches**: the last 10 batches are kept and Undo last batch can be pressed again to go back one more. A batch that can no longer be undone (files moved or edited since) can be forgotten to reach the one before; no file is touched. The batch saved by 26.10.3 is picked up as the first one.
+- **Sort by size** (smallest or largest first) before `{seq}` is applied.
+- New dependency `music-metadata` (reads the tags; JavaScript only, nothing is sent anywhere). The build and the tests now run on Node 22.
+- Tests: 91 in all (new ones for the tags, the extension, the CSV, the undo history, the sort and the ad-hoc signature).
+
 ## 26.10.3 — 2026-10-17
 
 - **Guided update, cleaner interrupted downloads** (shared updater, version 2): a download that is cut off, cancelled, stalls for a minute or ends with a failed rename no longer leaves an unfinished installer (`.part`) in the Downloads folder, and the ones an earlier run left are removed when the app starts.

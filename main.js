@@ -7,10 +7,13 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { AV_EXTENSIONS, buildPlan, sanitizeBase, isReservedName, MAX_NAME_LENGTH } from './src/planner.js';
 import { applyRenames, buildLog, checkUndo } from './src/renamer.js';
-import { checkForUpdate, downloadInstaller, sweepPartials, bannerState, remindLaterState, skipVersionState, makeSafetyCopy, installPlan, whatsNew, startupKind } from './src/updater.js';
+import { checkForUpdate, pageUrl, downloadInstaller, sweepPartials, bannerState, remindLaterState, skipVersionState, makeSafetyCopy, installPlan, whatsNew, startupKind } from './src/updater.js';
 import { createStore } from './src/settings.js';
 import { buildExport, prepareImport, backupFileName, MAX_BACKUP_BYTES } from './src/backup.js';
 import { createLogger } from './src/logger.js';
+import { createMetaReader } from './src/metadata.js';
+import { createUndoHistory } from './src/undo-history.js';
+import { batchCsv, csvFileName } from './src/csv.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAX_FILES = 20000;
@@ -28,11 +31,13 @@ let downloadedFor = null;
 let downloadAbort = null;
 let pendingImport = null;
 let startKind = 'same';
+let history = null; // the undo history (src/undo-history.js)
+let lastBatch = null; // the last batch of this session, with the failures: { time, rows }, for the CSV log
+const metaReader = createMetaReader();
 
 const settings = () => store.get();
 const send = (channel, ...args) => mainWindow?.webContents.send(channel, ...args);
 
-const undoFile = () => path.join(app.getPath('userData'), 'last-batch.json');
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -72,6 +77,7 @@ app.whenReady().then(() => {
   store = createStore({ file: path.join(app.getPath('userData'), 'settings.json') });
   logger = createLogger({ dir: path.join(app.getPath('userData'), 'logs'), retentionDays: 7 });
   logger.prune();
+  history = createUndoHistory({ file: path.join(app.getPath('userData'), 'undo-history.json'), legacyFile: path.join(app.getPath('userData'), 'last-batch.json') });
   logger.log('info', `File Renamer ${app.getVersion()} started (${process.platform} ${process.arch})`);
   const stale = sweepPartials(app.getPath('downloads'));
   if (stale.length) logger.log('info', `removed ${stale.length} unfinished installer download(s) left by an earlier run`);
@@ -159,6 +165,8 @@ ipcMain.handle('plan:build', (_e, files, opts = {}) => {
     seed: Number(opts.seed) || 1,
     find: opts.find,
     clean: opts.clean,
+    ext: opts.ext,
+    readMeta: (file) => metaReader.read(file),
     now: new Date(),
     env: process.env
   });
@@ -195,33 +203,25 @@ ipcMain.handle('rename:apply', async (_e, items) => {
   done.forEach((r, k) => { results[index[k]] = r; });
   logger.log('info', `rename: ${done.filter((r) => r.ok).length} renamed, ${results.filter((r) => r && !r.ok).length} failed`);
   const log = await buildLog(results.filter(Boolean));
-  if (log.entries.length) await fsp.writeFile(undoFile(), JSON.stringify(log), 'utf8').catch(() => {});
+  lastBatch = { time: log.createdAt, rows: results.filter(Boolean).map((r) => ({ from: r.from, to: r.to, ok: !!r.ok, error: r.error || null })) };
+  if (log.entries.length) await history.push(log).catch((err) => logger.log('error', `undo history not saved: ${err.message}`));
   return results;
 });
 
-async function readLog() {
-  try {
-    const log = JSON.parse(await fsp.readFile(undoFile(), 'utf8'));
-    return log && log.version === 1 && Array.isArray(log.entries) ? log : null;
-  } catch {
-    return null;
-  }
-}
-
 ipcMain.handle('undo:info', async () => {
-  const log = await readLog();
-  return log && log.entries.length ? { available: true, count: log.entries.length, createdAt: log.createdAt } : { available: false };
+  const i = await history.info();
+  return i ? { available: true, count: i.entries, createdAt: i.createdAt, batches: i.batches } : { available: false, batches: 0 };
 });
 
 ipcMain.handle('undo:check', async () => {
-  const log = await readLog();
-  if (!log) return { runnable: 0, problems: [] };
+  const [log, info] = [await history.top(), await history.info()];
+  if (!log) return { runnable: 0, problems: [], batches: 0 };
   const { runnable, problems } = await checkUndo(log);
-  return { runnable: runnable.length, problems: problems.map((p) => ({ from: p.entry.from, to: p.entry.to, error: p.error })) };
+  return { runnable: runnable.length, batches: info.batches, createdAt: log.createdAt, problems: problems.map((p) => ({ from: p.entry.from, to: p.entry.to, error: p.error })) };
 });
 
 ipcMain.handle('undo:run', async () => {
-  const log = await readLog();
+  const log = await history.top();
   if (!log) return { results: [] };
   const { runnable, problems } = await checkUndo(log);
   busyOps++;
@@ -232,12 +232,52 @@ ipcMain.handle('undo:run', async () => {
     busyOps--;
   }
   logger.log('info', `undo: ${results.filter((r) => r.ok).length} restored, ${problems.length} skipped`);
-  // Keep in the log only the entries that were not restored, so a second try can finish the job.
-  const restored = new Set(results.filter((r) => r.ok).map((r) => r.from));
-  const rest = log.entries.filter((e) => !restored.has(e.to));
-  if (rest.length) await fsp.writeFile(undoFile(), JSON.stringify({ ...log, entries: rest }), 'utf8').catch(() => {});
-  else await fsp.rm(undoFile(), { force: true });
+  // Only the entries that were not restored stay in the batch, so a second try can finish the job.
+  await history.settleTop(new Set(results.filter((r) => r.ok).map((r) => r.from))).catch((err) => logger.log('error', `undo history not saved: ${err.message}`));
   return { results, problems: problems.map((p) => ({ from: p.entry.from, to: p.entry.to, error: p.error })) };
+});
+
+// "Forget this batch": for a batch that can no longer be undone (files moved or edited since) and blocks the ones before it.
+ipcMain.handle('undo:forget', async () => {
+  await history.dropTop();
+  logger.log('info', 'undo: newest batch forgotten');
+  return true;
+});
+
+// ---- CSV log of the last batch, and the preview on the clipboard ---------------------------------------------
+
+// The batch of this session (with the files that failed); after a restart, the newest batch of the undo history.
+ipcMain.handle('batchlog:save', async () => {
+  let rows = lastBatch?.rows;
+  let time = lastBatch?.time;
+  if (!rows?.length) {
+    const top = await history.top();
+    if (top) { rows = top.entries.map((e) => ({ from: e.from, to: e.to, ok: true })); time = top.createdAt; }
+  }
+  if (!rows?.length) return { ok: false, error: 'none' };
+  const res = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: path.join(app.getPath('documents'), csvFileName()),
+    filters: [{ name: 'CSV', extensions: ['csv'] }]
+  });
+  if (res.canceled || !res.filePath) return { ok: false, cancelled: true };
+  try {
+    await fsp.writeFile(res.filePath, batchCsv(rows, time), 'utf8');
+    logger.log('info', `batch log saved (${rows.length} rows)`);
+    return { ok: true, file: path.basename(res.filePath), rows: rows.length };
+  } catch (err) {
+    logger.log('error', `batch log failed: ${err.message}`);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('clipboard:copy', (_e, text) => {
+  if (typeof text !== 'string' || !text || text.length > 5_000_000) return false;
+  clipboard.writeText(text);
+  return true;
+});
+
+ipcMain.handle('open-page', () => {
+  shell.openExternal(pageUrl(undefined, settings().language));
 });
 
 // ---- App, settings ----------------------------------------------------------------------------

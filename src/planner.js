@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fsp from 'node:fs/promises';
-import { resolveTemplate, makeRng } from './pattern.js';
-import { prepareTransform } from './text-tools.js';
+import { resolveTemplate, makeRng, metaKeysUsed } from './pattern.js';
+import { prepareTransform, applyExt } from './text-tools.js';
 
 // Extensions offered by the file dialog and used when scanning folders. This is a convenience
 // filter (common audio/video containers), not a list from a standard; files dropped one by one
@@ -50,11 +50,12 @@ async function lstatOrNull(p) {
 }
 
 // files: [{ path, selected }] in list order.
-// opts:  { pattern, seqStart, seqStep, seed, now, env, find, clean }  (find / clean: see text-tools.js)
+// opts:  { pattern, seqStart, seqStep, seed, now, env, find, clean, ext, readMeta }  (find / clean / ext: see text-tools.js;
+//        readMeta(path) -> { artist, title, duration, bitrate, samplerate } | null: asked only when the pattern uses one of those)
 // Returns one row per file: { path, dir, name, newName, status, reasons, notes }
 //   status: ok | unchanged | skipped | error
 //   reasons (error): empty, reserved, too-long, duplicate, exists, bad-regex
-//   notes: sanitized, case-only, chain
+//   notes: sanitized, case-only, chain, no-tags (a tag the pattern asks for is missing in the file)
 export async function buildPlan(files, opts) {
   const now = opts.now instanceof Date ? opts.now : new Date();
   const seqStart = Number.isFinite(opts.seqStart) ? opts.seqStart : 1;
@@ -74,18 +75,25 @@ export async function buildPlan(files, opts) {
 
   const transform = prepareTransform({ find: opts.find, clean: opts.clean });
 
+  // Tags and technical values: read only for the selected files and only if the pattern asks for them.
+  const metaKeys = typeof opts.readMeta === 'function' ? metaKeysUsed(pattern) : [];
+  if (metaKeys.length) {
+    await Promise.all(rows.filter((r) => r.status === 'ok').map(async (r) => { r.meta = (await opts.readMeta(r.path).catch(() => null)) || {}; }));
+  }
+
   let k = 0;
   rows.forEach((row, i) => {
     if (row.status !== 'ok') return;
     if (!transform.ok) { row.reasons.push(transform.error); return; } // invalid regular expression: nothing is renamed
     const { base, ext } = splitName(row.name);
     const rng = makeRng(((opts.seed >>> 0) + Math.imul(i + 1, 2654435761)) >>> 0);
-    const resolved = resolveTemplate(pattern, { now, mtime: row.sourceStat ? new Date(Number(row.sourceStat.mtimeMs)) : undefined, seq: seqStart + k * seqStep, orig: base, parent: path.basename(row.dir), rng, env: opts.env });
+    const resolved = resolveTemplate(pattern, { now, mtime: row.sourceStat ? new Date(Number(row.sourceStat.mtimeMs)) : undefined, seq: seqStart + k * seqStep, orig: base, parent: path.basename(row.dir), meta: row.meta, rng, env: opts.env });
+    if (metaKeys.some((key) => !row.meta?.[key])) row.notes.push('no-tags');
     k++;
     const clean = sanitizeBase(transform.run(resolved));
     if (clean.changed) row.notes.push('sanitized');
     if (!clean.value) { row.reasons.push('empty'); return; }
-    row.newName = clean.value + ext;
+    row.newName = clean.value + applyExt(ext, opts.ext);
     if (row.newName.length > MAX_NAME_LENGTH) row.reasons.push('too-long');
     if (isReservedName(row.newName)) row.reasons.push('reserved');
   });
@@ -134,6 +142,7 @@ export async function buildPlan(files, opts) {
 
   for (const row of rows) {
     delete row.sourceStat;
+    delete row.meta;
     if (row.reasons.length) row.status = 'error';
   }
   return rows;

@@ -1,6 +1,7 @@
 // Two optional steps applied to the name (without extension) after the pattern has been resolved:
 //   1. find and replace (plain text or regular expression; an empty "replace with" removes the text)
 //   2. clean up (accents, special characters, upper/lower/Title Case, spaces)
+// and one applied to the extension: keep it, lower case, UPPER CASE or replace it (only the name changes, the file is not converted).
 // Pure functions: no file system, no Electron.
 
 export const MAX_FIND_LENGTH = 200;
@@ -9,6 +10,10 @@ export const DEFAULT_FIND = Object.freeze({ text: '', replace: '', regex: false,
 export const DEFAULT_CLEAN = Object.freeze({ case: 'none', spaces: 'none', accents: false, special: false });
 export const CASE_MODES = ['none', 'lower', 'upper', 'title'];
 export const SPACE_MODES = ['none', 'underscore', 'hyphen'];
+
+export const DEFAULT_EXT = Object.freeze({ mode: 'keep', value: '' });
+export const EXT_MODES = ['keep', 'lower', 'upper', 'set'];
+export const MAX_EXT_LENGTH = 16;
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
@@ -30,6 +35,28 @@ export function sanitizeClean(raw) {
     accents: r.accents === true,
     special: r.special === true
   };
+}
+
+// A new extension: letters, digits, "_", "+" and "-", at most 16; a leading dot and spaces are dropped.
+export function cleanExtValue(v) {
+  return String(v ?? '').replace(/^[\s.]+/, '').replace(/[^A-Za-z0-9_+-]/g, '').slice(0, MAX_EXT_LENGTH);
+}
+
+export function sanitizeExt(raw) {
+  const r = isObj(raw) ? raw : {};
+  const mode = EXT_MODES.includes(r.mode) ? r.mode : 'keep';
+  const value = cleanExtValue(r.value);
+  return { mode: mode === 'set' && !value ? 'keep' : mode, value };
+}
+
+// ext: the extension with its dot ('.wav') or ''. Returns the extension of the new name.
+// A name without extension stays without one, except in "replace" mode, which gives it the new one.
+export function applyExt(ext, rawOpts) {
+  const o = sanitizeExt(rawOpts);
+  if (o.mode === 'lower') return ext.toLowerCase();
+  if (o.mode === 'upper') return ext.toUpperCase();
+  if (o.mode === 'set') return '.' + o.value;
+  return ext;
 }
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -73,10 +100,10 @@ export function applyClean(value, clean) {
   return v;
 }
 
-export const hasTransforms = (find, clean) => {
+export const hasTransforms = (find, clean, ext) => {
   const f = sanitizeFind(find);
   const c = sanitizeClean(clean);
-  return !!f.text || c.case !== 'none' || c.spaces !== 'none' || c.accents || c.special;
+  return !!f.text || c.case !== 'none' || c.spaces !== 'none' || c.accents || c.special || sanitizeExt(ext).mode !== 'keep';
 };
 
 // opts: { find, clean }. Returns the new text, or throws Error('bad-regex') when the expression is not valid.

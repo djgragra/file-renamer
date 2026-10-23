@@ -12,12 +12,17 @@
 //   {env:NAME}        -> value of the environment variable NAME ('' when unset)
 //   {orig}            -> original file name without extension
 //   {parent}          -> name of the folder that contains the file
+//   {artist}, {title} -> tags read from the file (empty when the file has none)
+//   {duration}        -> length in whole seconds; {duration:mmss} -> 0307; {duration:hhmmss} -> 000307
+//   {bitrate}         -> kbit/s, rounded; {samplerate} -> Hz
 //
 // FORMAT tokens (own implementation, not date-fns): yyyy yy MM M dd d HH H hh h mm m ss s SSS a.
 // Text between single quotes is literal ('T'). Any other character is copied as is.
 
 const PLACEHOLDER_RE = /\{([a-zA-Z]+)(?:([+-]\d+)([mhd]))?(?::([^}]*))?\}/g;
-const KNOWN = new Set(['date', 'time', 'mdate', 'mtime', 'seq', 'rand', 'env', 'orig', 'parent']);
+// Placeholders whose value is read from the file itself (src/metadata.js): the plan asks for the tags only when the pattern uses one.
+export const META_KEYS = ['artist', 'title', 'duration', 'bitrate', 'samplerate'];
+const KNOWN = new Set(['date', 'time', 'mdate', 'mtime', 'seq', 'rand', 'env', 'orig', 'parent', ...META_KEYS]);
 const MAX_RAND = 64;
 const MAX_PAD = 20;
 
@@ -85,7 +90,22 @@ function randomString(len, rng) {
   return out;
 }
 
-// ctx: { now: Date, mtime: Date (file modification time), seq: number, orig: string, parent: string (folder name), rng: () => number, env: object }
+// Metadata placeholders used by a pattern, in order of appearance, without repeats.
+export function metaKeysUsed(template) {
+  const found = new Set();
+  for (const m of String(template).matchAll(PLACEHOLDER_RE)) if (META_KEYS.includes(m[1])) found.add(m[1]);
+  return [...found];
+}
+
+// duration in seconds -> "187" | mmss "0307" | hhmmss "000307" (a colon is not allowed in a file name)
+export function formatDuration(seconds, fmt = '') {
+  const total = Math.max(0, Math.round(seconds));
+  if (fmt === 'mmss') return pad(Math.floor(total / 60), 2) + pad(total % 60, 2);
+  if (fmt === 'hhmmss') return pad(Math.floor(total / 3600), 2) + pad(Math.floor(total / 60) % 60, 2) + pad(total % 60, 2);
+  return String(total);
+}
+
+// ctx: { now: Date, mtime: Date (file modification time), seq: number, orig: string, parent: string (folder name), meta: { artist, title, duration (s), bitrate (kbit/s), samplerate (Hz) }, rng: () => number, env: object }
 export function resolveTemplate(template, ctx = {}) {
   const now = ctx.now instanceof Date ? ctx.now : new Date();
   const mtime = ctx.mtime instanceof Date && !isNaN(ctx.mtime) ? ctx.mtime : now;
@@ -117,6 +137,14 @@ export function resolveTemplate(template, ctx = {}) {
         return String(ctx.orig ?? '');
       case 'parent':
         return String(ctx.parent ?? '');
+      case 'artist':
+      case 'title':
+        return String(ctx.meta?.[key] ?? '');
+      case 'duration':
+        return Number.isFinite(ctx.meta?.duration) ? formatDuration(ctx.meta.duration, arg) : '';
+      case 'bitrate':
+      case 'samplerate':
+        return Number.isFinite(ctx.meta?.[key]) ? String(Math.round(ctx.meta[key])) : '';
     }
     return match;
   });

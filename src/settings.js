@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { DEFAULT_FIND, DEFAULT_CLEAN, sanitizeFind, sanitizeClean } from './text-tools.js';
+import { DEFAULT_FIND, DEFAULT_CLEAN, DEFAULT_EXT, sanitizeFind, sanitizeClean, sanitizeExt } from './text-tools.js';
 
 export const MAX_PRESETS = 50;
 export const MAX_RECENT = 8;
@@ -20,8 +20,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   avOnly: true,
   find: DEFAULT_FIND,
   clean: DEFAULT_CLEAN,
+  ext: DEFAULT_EXT,
   recent: [], // last patterns used
-  presets: [], // [{ id, name, pattern, seqStart, seqStep, find, clean }]
+  presets: [], // [{ id, name, pattern, seqStart, seqStep, find, clean, ext }]
   checkUpdates: true,
   lastSeenVersion: '', // the version whose "What's new" the user has already seen
   updateState: { skipVersion: '', remindUntil: 0, lastCheck: null }, // lastCheck: { at, ok, error }
@@ -44,7 +45,8 @@ export function sanitizePreset(raw) {
     seqStart: int(raw.seqStart, 1),
     seqStep: int(raw.seqStep, 1) || 1,
     find: sanitizeFind(raw.find),
-    clean: sanitizeClean(raw.clean)
+    clean: sanitizeClean(raw.clean),
+    ext: sanitizeExt(raw.ext)
   };
 }
 
@@ -80,6 +82,7 @@ export function sanitizeSettings(raw) {
     avOnly: r.avOnly === undefined ? d.avOnly : r.avOnly === true,
     find: sanitizeFind(r.find),
     clean: sanitizeClean(r.clean),
+    ext: sanitizeExt(r.ext),
     recent: (Array.isArray(r.recent) ? r.recent : []).filter((x) => typeof x === 'string' && x.trim()).map((x) => x.slice(0, MAX_PATTERN_LENGTH)).slice(0, MAX_RECENT),
     presets: sanitizePresets(r.presets),
     checkUpdates: r.checkUpdates === undefined ? d.checkUpdates : r.checkUpdates === true,
