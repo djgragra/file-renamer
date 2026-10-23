@@ -112,7 +112,8 @@ jobs:
             echo "== $dmg"
             codesign --verify --deep --strict --verbose=2 "$APP"
             codesign -dv "$APP" 2>&1 | grep -E "Signature|Identifier" || true
-            hdiutil detach "$MNT" -quiet
+            # the disk image can still be "busy" for a moment after codesign: try again, then force
+            hdiutil detach "$MNT" -quiet || { sleep 3; hdiutil detach "$MNT" -quiet || hdiutil detach "$MNT" -force -quiet; }
           done
 
       - name: Upload installer artifact

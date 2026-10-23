@@ -23,6 +23,7 @@ test('macOS: the ad-hoc signature hook is wired into the build and only acts on 
   const wf = read('.github/workflows/build-installers.yml');
   assert.match(wf, /codesign --verify --deep --strict/, 'the workflow checks the apps inside the disk images');
   assert.match(wf, /CSC_IDENTITY_AUTO_DISCOVERY: "false"/);
+  assert.match(wf, /hdiutil detach "\$MNT" -quiet \|\| \{ sleep 3; hdiutil detach "\$MNT" -quiet \|\| hdiutil detach "\$MNT" -force -quiet; \}/, 'a busy disk image does not fail the check (exit 16 on 23 October 2026)');
   assert.doesNotMatch(wf, /node-version: 20/, 'music-metadata needs Node 22');
 });
 
