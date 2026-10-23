@@ -18,8 +18,12 @@ contextBridge.exposeInMainWorld('api', {
   undo: {
     info: () => ipcRenderer.invoke('undo:info'),
     check: () => ipcRenderer.invoke('undo:check'),
-    run: () => ipcRenderer.invoke('undo:run')
+    run: () => ipcRenderer.invoke('undo:run'),
+    forget: () => ipcRenderer.invoke('undo:forget')
   },
+  batchLog: () => ipcRenderer.invoke('batchlog:save'),
+  copyText: (text) => ipcRenderer.invoke('clipboard:copy', text),
+  openPage: () => ipcRenderer.invoke('open-page'),
   backup: {
     exportFile: () => ipcRenderer.invoke('backup:export'),
     importPick: () => ipcRenderer.invoke('backup:import-pick'),

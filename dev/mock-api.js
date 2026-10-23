@@ -8,7 +8,7 @@
     info: function () { return Promise.resolve({ version: '26.10.2', platform: 'darwin', arch: 'arm64' }); },
     copySupportInfo: function () { return Promise.resolve('File Renamer 26.10.2'); },
     settings: (function () {
-      var s = { language: 'en', theme: 'auto', pattern: '{date:yyyyMMdd}_{seq:3}_{orig}', seqStart: 1, seqStep: 1, recursive: false, avOnly: true, find: { text: '', replace: '', regex: false, caseSensitive: false }, clean: { case: 'none', spaces: 'none', accents: false, special: false }, recent: [], presets: [], checkUpdates: true, updateState: { lastCheck: null }, migrated: true };
+      var s = { language: 'en', theme: 'auto', pattern: '{date:yyyyMMdd}_{seq:3}_{orig}', seqStart: 1, seqStep: 1, recursive: false, avOnly: true, find: { text: '', replace: '', regex: false, caseSensitive: false }, clean: { case: 'none', spaces: 'none', accents: false, special: false }, ext: { mode: 'keep', value: '' }, recent: [], presets: [], checkUpdates: true, updateState: { lastCheck: null }, migrated: true };
       return { get: function () { return Promise.resolve(JSON.parse(JSON.stringify(s))); }, update: function (p) { Object.keys(p).forEach(function (k) { s[k] = p[k]; }); return Promise.resolve(s); } };
     })(),
     pathForFile: function (f) { return '/Volumes/Audio/' + f.name; },
@@ -32,7 +32,10 @@
       }));
     },
     rename: function (items) { return Promise.resolve(items.map(function (i) { return { from: i.path, to: i.path.replace(/[^/]+$/, i.newName), ok: true }; })); },
-    undo: { info: function () { return Promise.resolve({ available: true, count: 3, createdAt: new Date().toISOString() }); }, check: function () { return Promise.resolve({ runnable: 2, problems: [{ from: '/a', to: '/x/b.wav', error: 'changed' }] }); }, run: function () { return Promise.resolve({ results: [] }); } },
+    undo: { info: function () { return Promise.resolve({ available: true, count: 3, createdAt: new Date().toISOString(), batches: 3 }); }, check: function () { return Promise.resolve({ runnable: 2, batches: 3, problems: [{ from: '/a', to: '/x/b.wav', error: 'changed' }] }); }, run: function () { return Promise.resolve({ results: [] }); }, forget: function () { return Promise.resolve(true); } },
+    batchLog: function () { return Promise.resolve({ ok: true, file: 'file-renamer-log.csv', rows: 3 }); },
+    copyText: function () { return Promise.resolve(true); },
+    openPage: function () {},
     backup: { exportFile: function () { return Promise.resolve({ ok: true, file: 'file-renamer-backup-2026-10-13.json' }); }, importPick: function () { return Promise.resolve({ ok: true, presets: 2, newPresets: 1 }); }, importApply: function () { return Promise.resolve({ ok: false, error: 'invalid' }); }, importCancel: function () { return Promise.resolve(true); } },
     update: { check: function () { return Promise.resolve({ info: { ok: true, current: '26.10.2', available: false }, banner: 'none', lastCheck: { at: Date.now(), ok: true, error: '' }, downloaded: null }); }, download: function () { return Promise.resolve({ ok: false, error: 'mock' }); }, cancel: function () {}, remind: function () {}, skip: function () {}, install: function () { return Promise.resolve({ ok: false, error: 'busy' }); }, reveal: function () {}, onProgress: function (cb) { listeners.push(cb); } },
     whatsNew: { get: function () { return Promise.resolve(null); }, seen: function () { return Promise.resolve(true); } },

@@ -43,6 +43,11 @@
       <button type="button" class="chip mono" data-ins="{env:NAME}" data-i18n-title="ph.env">{env}</button>
       <button type="button" class="chip mono" data-ins="{orig}" data-i18n-title="ph.orig">{orig}</button>
       <button type="button" class="chip mono" data-ins="{parent}" data-i18n-title="ph.parent">{parent}</button>
+      <button type="button" class="chip mono" data-ins="{artist}" data-i18n-title="ph.artist">{artist}</button>
+      <button type="button" class="chip mono" data-ins="{title}" data-i18n-title="ph.title">{title}</button>
+      <button type="button" class="chip mono" data-ins="{duration}" data-i18n-title="ph.duration">{duration}</button>
+      <button type="button" class="chip mono" data-ins="{bitrate}" data-i18n-title="ph.bitrate">{bitrate}</button>
+      <button type="button" class="chip mono" data-ins="{samplerate}" data-i18n-title="ph.samplerate">{samplerate}</button>
     </div>
     <div class="opts">
       <label class="field"><span data-i18n="seq.start">Counter starts at</span><input id="seqStart" class="mono num" type="number" step="1" value="1"></label>
@@ -83,6 +88,16 @@
           <label class="check"><input id="cleanAccents" type="checkbox"><span data-i18n="clean.accents">Remove accents</span></label>
           <label class="check"><input id="cleanSpecial" type="checkbox"><span data-i18n="clean.special">Remove special characters</span></label>
         </fieldset>
+        <fieldset class="tools__grp">
+          <legend data-i18n="ext.title">Extension</legend>
+          <label class="field"><span data-i18n="ext.title">Extension</span>
+            <select id="extMode">
+              <option value="keep" data-i18n="ext.keep"></option><option value="lower" data-i18n="ext.lower"></option>
+              <option value="upper" data-i18n="ext.upper"></option><option value="set" data-i18n="ext.set"></option>
+            </select></label>
+          <label class="field" id="extValueWrap" hidden><span data-i18n="ext.value">New extension</span><input id="extValue" class="mono" type="text" spellcheck="false" autocomplete="off" maxlength="16" placeholder="wav"></label>
+          <p class="hint" data-i18n="ext.hint"></p>
+        </fieldset>
       </div>
     </details>
   </section>
@@ -99,6 +114,8 @@
         <option value="nameAsc" data-i18n="sort.nameAsc">Name A–Z</option>
         <option value="nameDesc" data-i18n="sort.nameDesc">Name Z–A</option>
         <option value="modified" data-i18n="sort.modified">Modified, oldest first</option>
+        <option value="sizeAsc" data-i18n="sort.sizeAsc">Size, smallest first</option>
+        <option value="sizeDesc" data-i18n="sort.sizeDesc">Size, largest first</option>
       </select></span>
     </div>
     <div class="rows" id="rows"></div>
@@ -116,6 +133,8 @@
         <button type="button" id="addFilesBtn" class="btn btn--ghost" data-icon="file" data-i18n="btn.addFiles">Add files…</button>
         <button type="button" id="addFolderBtn" class="btn btn--ghost" data-icon="folder" data-i18n="btn.addFolder">Add folder…</button>
         <button type="button" id="clearBtn" class="btn btn--ghost" data-icon="trash" data-i18n="btn.clear">Clear list</button>
+        <button type="button" id="copyBtn" class="btn btn--ghost" data-icon="notes" data-i18n="btn.copyPreview" disabled>Copy preview</button>
+        <button type="button" id="logBtn" class="btn btn--ghost" data-icon="download" data-i18n="btn.saveLog" disabled>Save log…</button>
         <button type="button" id="undoBtn" class="btn btn--ghost" data-icon="undo" data-i18n="btn.undo" disabled>Undo last batch</button>
         <button type="button" id="renameBtn" class="btn btn--primary" disabled>Rename…</button>
       </div>
@@ -145,14 +164,20 @@
     <p id="resultText"></p>
     <ul class="pairs mono" id="resultList"></ul>
     <p class="hint" id="resultHint"></p>
-    <div class="dlg__actions"><button type="button" class="btn btn--primary" id="resultClose" data-i18n="result.close">Close</button></div>
+    <div class="dlg__actions">
+      <button type="button" class="btn btn--ghost" id="resultLog" data-i18n="btn.saveLog">Save log…</button>
+      <button type="button" class="btn btn--primary" id="resultClose" data-i18n="result.close">Close</button>
+    </div>
   </dialog>
 
   <dialog id="undoDlg" class="dlg">
     <h2 data-i18n="undo.title">Undo last batch</h2>
     <p id="undoText"></p>
     <ul class="pairs mono" id="undoList"></ul>
+    <p class="hint" id="undoOlder"></p>
+    <p class="hint" id="undoForgetHint" hidden data-i18n="undo.forgetHint"></p>
     <div class="dlg__actions">
+      <button type="button" class="btn btn--ghost" id="undoForget" data-i18n="undo.forget">Forget this batch</button>
       <button type="button" class="btn btn--ghost" id="undoCancel" data-i18n="confirm.cancel">Cancel</button>
       <button type="button" class="btn btn--primary" id="undoOk" data-i18n="undo.ok">Undo</button>
     </div>
@@ -219,7 +244,7 @@
         </div>
         <p class="hint" id="abResult" aria-live="polite"></p>
         <aside class="tip">
-          <img class="tip__jar" src="img/tip-jar.png" alt="" width="80" height="59">
+          <img class="tip__jar" id="abTipJar" src="img/tip-jar.png" alt="" width="80" height="59" aria-hidden="true" tabindex="-1">
           <div class="tip__body">
             <p data-i18n="ab.tipText"></p>
             <a href="https://onairgarage.com/support/" id="abTip" class="tip__btn" data-ext data-i18n="ab.tipBtn">Tip jar</a>
@@ -288,11 +313,16 @@
         <li><code>{env:NAME}</code> — <span data-i18n="help.ph.env"></span></li>
         <li><code>{orig}</code> — <span data-i18n="help.ph.orig"></span></li>
         <li><code>{parent}</code> — <span data-i18n="help.ph.parent"></span></li>
+        <li><code>{artist}</code> <code>{title}</code> — <span data-i18n="help.ph.tags"></span></li>
+        <li><code>{duration}</code> <code>{duration:mmss}</code> — <span data-i18n="help.ph.duration"></span></li>
+        <li><code>{bitrate}</code> <code>{samplerate}</code> — <span data-i18n="help.ph.audio"></span></li>
       </ul>
+      <p data-i18n="help.phMeta"></p>
       <p data-i18n="help.phFmt"></p>
       <p data-i18n="help.phNow"></p>
       <h3 data-i18n="help.hTools">Find &amp; replace, clean up</h3>
       <p data-i18n="help.pTools"></p>
+      <p data-i18n="help.pExt"></p>
       <h3 data-i18n="help.hPresets">Presets</h3>
       <p data-i18n="help.pPresets"></p>
       <h3 data-i18n="help.hSafe">Safety</h3>
@@ -316,6 +346,7 @@
   </dialog>
 
   <script src="i18n.js"></script>
+  <script src="sorting.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

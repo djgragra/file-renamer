@@ -23,7 +23,7 @@ NAMES.forEach((n, i) => { fs.writeFileSync(path.join(day, n), 'x'.repeat(100 + i
 function run(theme, language, settings, shots) {
   return (async () => {
     const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-shot-ud-'));
-    fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ version: 1, settings: { language, theme, migrated: true, lastSeenVersion: '26.10.2', ...settings } }));
+    fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ version: 1, settings: { language, theme, migrated: true, lastSeenVersion: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version, ...settings } }));
     const port = 9800 + Math.floor(Math.random() * 150);
     const child = spawn(electron, [root, ...(process.env.FR_E2E_NO_SANDBOX ? ['--no-sandbox'] : []), `--remote-debugging-port=${port}`, `--user-data-dir=${userData}`], { stdio: 'ignore' });
     try {

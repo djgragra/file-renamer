@@ -3,7 +3,6 @@
   "use strict";
 
   var LEGACY_KEY = "com.onairgarage.filerenamer.";
-  var RELEASES = "https://github.com/djgragra/file-renamer/releases";
   var api = window.api;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -20,7 +19,8 @@
     reqId: 0,
     counter: 0,
     rowEls: [],
-    busy: false
+    busy: false,
+    lastBatch: false    // a batch was renamed in this session (the CSV log can be saved)
   };
   var planTimer = null;
 
@@ -113,7 +113,7 @@
   var patternEl = $("pattern");
   var seqStartEl = $("seqStart");
   var seqStepEl = $("seqStep");
-  var KNOWN = ["date", "time", "mdate", "mtime", "seq", "rand", "env", "orig", "parent"];
+  var KNOWN = ["date", "time", "mdate", "mtime", "seq", "rand", "env", "orig", "parent", "artist", "title", "duration", "bitrate", "samplerate"];
 
   function recentPatterns() { return (cfg && cfg.recent) || []; }
   function rememberPattern(p) {
@@ -139,21 +139,27 @@
   function cleanOpts() {
     return { case: $("cleanCase").value, spaces: $("cleanSpaces").value, accents: $("cleanAccents").checked, special: $("cleanSpecial").checked };
   }
+  function extOpts() {
+    return { mode: $("extMode").value, value: $("extValue").value.replace(/^[\s.]+/, "").replace(/[^A-Za-z0-9_+-]/g, "").slice(0, 16) };
+  }
   function toolsActive() {
-    var f = findOpts(), c = cleanOpts();
-    return !!f.text || c.case !== "none" || c.spaces !== "none" || c.accents || c.special;
+    var f = findOpts(), c = cleanOpts(), e = extOpts();
+    return !!f.text || c.case !== "none" || c.spaces !== "none" || c.accents || c.special || e.mode !== "keep";
   }
   function saveTools() {
-    saveCfg({ find: findOpts(), clean: cleanOpts() });
+    $("extValueWrap").hidden = $("extMode").value !== "set";
+    saveCfg({ find: findOpts(), clean: cleanOpts(), ext: extOpts() });
     $("toolsBadge").hidden = !toolsActive();
     schedulePlan();
   }
-  ["findText", "findRepl", "findRegex", "findCase", "cleanCase", "cleanSpaces", "cleanAccents", "cleanSpecial"].forEach(function (id) {
+  ["findText", "findRepl", "findRegex", "findCase", "cleanCase", "cleanSpaces", "cleanAccents", "cleanSpecial", "extMode", "extValue"].forEach(function (id) {
     $(id).addEventListener("input", saveTools);
     $(id).addEventListener("change", saveTools);
   });
 
-  function setTools(find, clean) {
+  function setTools(find, clean, ext) {
+    ext = ext || { mode: "keep", value: "" };
+    $("extMode").value = ext.mode; $("extValue").value = ext.value; $("extValueWrap").hidden = ext.mode !== "set";
     $("findText").value = find.text; $("findRepl").value = find.replace;
     $("findRegex").checked = find.regex; $("findCase").checked = find.caseSensitive;
     $("cleanCase").value = clean.case; $("cleanSpaces").value = clean.spaces;
@@ -185,7 +191,7 @@
     var id = ++state.reqId;
     if (!state.files.length || !pattern.trim()) { state.plan = []; paint(); return Promise.resolve(); }
     var files = state.files.map(function (x) { return { path: x.path, selected: x.selected }; });
-    return api.plan(files, { pattern: pattern, seqStart: numVal(seqStartEl, 1), seqStep: numVal(seqStepEl, 1), seed: state.seed, find: f, clean: cleanOpts() })
+    return api.plan(files, { pattern: pattern, seqStart: numVal(seqStartEl, 1), seqStep: numVal(seqStepEl, 1), seed: state.seed, find: f, clean: cleanOpts(), ext: extOpts() })
       .then(function (rows) { if (id === state.reqId) { state.plan = rows; paint(); } });
   }
 
@@ -230,7 +236,7 @@
   }
   function newId() { return "p" + Math.random().toString(36).slice(2, 10); }
   function currentPreset(name, id) {
-    return { id: id, name: name, pattern: patternEl.value, seqStart: numVal(seqStartEl, 1), seqStep: numVal(seqStepEl, 1) || 1, find: findOpts(), clean: cleanOpts() };
+    return { id: id, name: name, pattern: patternEl.value, seqStart: numVal(seqStartEl, 1), seqStep: numVal(seqStepEl, 1) || 1, find: findOpts(), clean: cleanOpts(), ext: extOpts() };
   }
 
   $("presetSel").addEventListener("change", function () {
@@ -238,8 +244,8 @@
     $("presetDel").disabled = !p;
     if (!p) return;
     patternEl.value = p.pattern; seqStartEl.value = p.seqStart; seqStepEl.value = p.seqStep;
-    setTools(p.find, p.clean);
-    saveCfg({ pattern: p.pattern, seqStart: p.seqStart, seqStep: p.seqStep, find: p.find, clean: p.clean });
+    setTools(p.find, p.clean, p.ext);
+    saveCfg({ pattern: p.pattern, seqStart: p.seqStart, seqStep: p.seqStep, find: p.find, clean: p.clean, ext: p.ext });
     schedulePlan();
   });
 
@@ -305,15 +311,7 @@
     if (added) { applySort(); renderList(); schedulePlan(); }
   }
 
-  function applySort() {
-    var by = {
-      added: function (a, b) { return a.added - b.added; },
-      nameAsc: function (a, b) { return a.name.localeCompare(b.name, undefined, { numeric: true }) || a.added - b.added; },
-      nameDesc: function (a, b) { return b.name.localeCompare(a.name, undefined, { numeric: true }) || a.added - b.added; },
-      modified: function (a, b) { return a.mtimeMs - b.mtimeMs || a.added - b.added; }
-    };
-    state.files.sort(by[state.sort] || by.added);
-  }
+  function applySort() { FRSort.sort(state.files, state.sort); }
 
   $("sortSel").addEventListener("change", function () {
     state.sort = this.value; applySort(); renderList(); schedulePlan();
@@ -404,6 +402,7 @@
     btn.disabled = state.busy || !ready || problems > 0;
     btn.title = problems > 0 ? t("tip.blocked") : "";
     $("clearBtn").disabled = state.busy || !state.files.length;
+    $("copyBtn").disabled = !ready;
 
     // status pill in the header: the state in words
     var pill = $("statusPill"), kind = "off", text = t("pill.empty");
@@ -477,6 +476,7 @@
           if (f) { f.path = r.to; f.name = baseName(r.to); f.dir = dirName(r.to); f.selected = false; }
         } else if (r) failed.push(r);
       });
+      state.lastBatch = true;
       showResult(ok, failed);
       state.busy = false;
       renderList(); schedulePlan(); refreshUndo();
@@ -499,11 +499,32 @@
   }
   $("resultClose").addEventListener("click", function () { closeDlg("resultDlg"); });
 
+  // ---- Copy the preview, save the log ------------------------------------------------------
+  // "old name → new name", one line per file that would be renamed (the ones the Rename button counts)
+  $("copyBtn").addEventListener("click", function () {
+    var lines = [];
+    state.plan.forEach(function (r, i) { if (r.status === "ok") lines.push(state.files[i].name + " → " + r.newName); });
+    if (!lines.length) { toast(t("copy.none")); return; }
+    api.copyText(lines.join("\n")).then(function (ok) { toast(ok ? t("copy.done", { n: lines.length }) : t("copy.none")); });
+  });
+
+  function saveLog() {
+    api.batchLog().then(function (r) {
+      if (r.ok) toast(t("log.saved", { file: r.file }));
+      else if (r.error === "none") toast(t("log.none"));
+      else if (!r.cancelled) toast(String(r.error));
+    });
+  }
+  $("logBtn").addEventListener("click", saveLog);
+  $("resultLog").addEventListener("click", saveLog);
+
   // ---- Undo --------------------------------------------------------------------------------
+  // The last batches are kept (10): each press goes back one batch.
   function refreshUndo() {
     return api.undo.info().then(function (i) {
       $("undoBtn").disabled = !i.available;
-      $("undoBtn").title = i.available ? new Date(i.createdAt).toLocaleString(lang) + " · " + t("sum.total", { n: i.count }) : "";
+      $("logBtn").disabled = !i.available && !state.lastBatch;
+      $("undoBtn").title = i.available ? new Date(i.createdAt).toLocaleString(lang) + " · " + t("sum.total", { n: i.count }) + (i.batches > 1 ? " · +" + (i.batches - 1) : "") : "";
     });
   }
 
@@ -521,8 +542,14 @@
         });
       }
       $("undoOk").disabled = !c.runnable;
+      $("undoOlder").textContent = c.batches > 1 ? t("undo.older", { n: c.batches - 1 }) : "";
+      $("undoForgetHint").hidden = !!c.runnable;
+      $("undoForget").hidden = !!c.runnable && !c.problems.length;
       openDlg("undoDlg");
     });
+  });
+  $("undoForget").addEventListener("click", function () {
+    api.undo.forget().then(function () { closeDlg("undoDlg"); toast(t("undo.forgot")); refreshUndo(); });
   });
   $("undoCancel").addEventListener("click", function () { closeDlg("undoDlg"); });
   $("undoOk").addEventListener("click", function () {
@@ -600,7 +627,7 @@
     } else {
       return false;
     }
-    if (available && upd.phase !== "installing") actions.appendChild(btn(t("upd.notes"), "btn--ghost btn--small", function () { api.openExternal(info.url); }, "notes"));
+    if (available && upd.phase !== "installing") actions.appendChild(btn(t("upd.notes"), "btn--ghost btn--small", function () { api.openPage(); }, "notes"));
     box.appendChild(main);
     box.appendChild(actions);
     return true;
@@ -681,7 +708,7 @@
     } else {
       var p = document.createElement("p"); p.textContent = t("wn.empty"); body.appendChild(p);
     }
-    $("newsNotes").onclick = function () { api.openExternal(RELEASES + "/tag/v" + w.version); };
+    $("newsNotes").onclick = function () { api.openPage(); };
     openDlg("newsDlg");
   }
   $("newsOk").addEventListener("click", function () { closeDlg("newsDlg"); api.whatsNew.seen(); });
@@ -727,7 +754,9 @@
   // help & about
   $("abManual").addEventListener("click", function (e) { e.preventDefault(); closeDlg("setDlg"); openDlg("helpDlg"); });
   $("abCopy").addEventListener("click", function () { api.copySupportInfo().then(function () { $("abResult").textContent = t("ab.copied"); }); });
-  $("abTip").addEventListener("click", function (e) { e.preventDefault(); api.openExternal(I18N.tipUrl(lang)); });
+  function openTip(e) { e.preventDefault(); api.openExternal(I18N.tipUrl(lang)); }
+  $("abTip").addEventListener("click", openTip);
+  $("abTipJar").addEventListener("click", openTip); // the jar does what the button does (the button stays the link for keyboards and screen readers)
   $("abLogs").addEventListener("click", function () { api.openLogs(); });
   $("abCheck").addEventListener("click", function () { showTab("updates"); checkUpdates(true); });
 
@@ -751,7 +780,7 @@
     patternEl.value = cfg.pattern; seqStartEl.value = cfg.seqStart; seqStepEl.value = cfg.seqStep;
     $("optRecursive").checked = cfg.recursive; $("optAv").checked = cfg.avOnly;
     $("updAuto").checked = cfg.checkUpdates;
-    setTools(cfg.find, cfg.clean);
+    setTools(cfg.find, cfg.clean, cfg.ext);
     fillRecent();
     applyI18n();
     schedulePlan();

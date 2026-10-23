@@ -1,6 +1,6 @@
 {
   "name": "file-renamer",
-  "version": "26.10.3",
+  "version": "26.10.4",
   "description": "Batch renamer for audio and video files with placeholder patterns, mandatory preview and undo",
   "main": "main.js",
   "type": "module",
@@ -39,6 +39,7 @@
     "directories": {
       "output": "release"
     },
+    "afterPack": "dev/sign-adhoc.cjs",
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
@@ -71,5 +72,8 @@
       "installerHeaderIcon": "assets/icon.ico",
       "shortcutName": "File Renamer"
     }
+  },
+  "dependencies": {
+    "music-metadata": "^12.2.3"
   }
 }

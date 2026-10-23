@@ -181,7 +181,7 @@ body.dragging .empty { border-color: var(--accent); }
 .about dt { color: var(--ink2); }
 .about dd { margin: 0; }
 .tip { display: flex; align-items: center; gap: 16px; margin: 18px 0 4px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel2); }
-.tip__jar { flex: 0 0 auto; width: 80px; height: auto; }
+.tip__jar { flex: 0 0 auto; width: 80px; height: auto; cursor: pointer; }
 .tip__body { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
 .tip__body p { margin: 0; font-size: 13px; color: var(--ink2); }
 .tip__btn { display: inline-block; padding: 5px 16px; border: 2px solid #fbf4e4; border-radius: 999px; background: #c8232c; color: #fbf4e4; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; text-decoration: none; transition: background var(--ease); }
