@@ -754,7 +754,9 @@
   // help & about
   $("abManual").addEventListener("click", function (e) { e.preventDefault(); closeDlg("setDlg"); openDlg("helpDlg"); });
   $("abCopy").addEventListener("click", function () { api.copySupportInfo().then(function () { $("abResult").textContent = t("ab.copied"); }); });
-  $("abTip").addEventListener("click", function (e) { e.preventDefault(); api.openExternal(I18N.tipUrl(lang)); });
+  function openTip(e) { e.preventDefault(); api.openExternal(I18N.tipUrl(lang)); }
+  $("abTip").addEventListener("click", openTip);
+  $("abTipJar").addEventListener("click", openTip); // the jar does what the button does (the button stays the link for keyboards and screen readers)
   $("abLogs").addEventListener("click", function () { api.openLogs(); });
   $("abCheck").addEventListener("click", function () { showTab("updates"); checkUpdates(true); });
 

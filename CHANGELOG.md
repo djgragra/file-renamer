@@ -10,7 +10,7 @@
 - **Undo several batches**: the last 10 batches are kept and Undo last batch can be pressed again to go back one more. A batch that can no longer be undone (files moved or edited since) can be forgotten to reach the one before; no file is touched. The batch saved by 26.10.3 is picked up as the first one.
 - **Sort by size** (smallest or largest first) before `{seq}` is applied.
 - New dependency `music-metadata` (reads the tags; JavaScript only, nothing is sent anywhere). The build and the tests now run on Node 22.
-- Tests: 91 in all (new ones for the tags, the extension, the CSV, the undo history, the sort and the ad-hoc signature).
+- Tests: 92 in all (new ones for the tags, the extension, the CSV, the undo history, the sort and the ad-hoc signature).
 
 ## 26.10.3 — 2026-10-17
 

@@ -29,6 +29,16 @@ test('tip line: the browser opens those pages, nothing else from the outside; th
   assert.ok(fs.statSync(path.join(root, 'renderer', 'img', 'tip-jar.png')).size > 1000);
   assert.ok(JSON.parse(read('package.json')).build.files.includes('renderer/**/*'));
   const html = read('renderer/index.html');
-  assert.match(html, /<img class="tip__jar" src="img\/tip-jar\.png" alt=""/); // decorative
+  assert.match(html, /<img class="tip__jar" id="abTipJar" src="img\/tip-jar\.png" alt=""/); // decorative
   assert.doesNotMatch(read('renderer/app.js'), /setTimeout\([^)]*abTip/); // no pop-up, no reminder: a link the user clicks
+});
+
+test('tip line: a click on the jar opens the same page as the button; the jar is hidden from keyboards and screen readers', () => {
+  const html = read('renderer/index.html');
+  assert.match(html, /id="abTipJar"[^>]*aria-hidden="true"[^>]*tabindex="-1"/);
+  const app = read('renderer/app.js');
+  assert.match(app, /function openTip\(e\) \{ e\.preventDefault\(\); api\.openExternal\(I18N\.tipUrl\(lang\)\); \}/);
+  assert.match(app, /\$\("abTip"\)\.addEventListener\("click", openTip\)/);
+  assert.match(app, /\$\("abTipJar"\)\.addEventListener\("click", openTip\)/);
+  assert.match(read('renderer/style.css'), /\.tip__jar \{[^}]*cursor: pointer/);
 });
