@@ -83,6 +83,8 @@ The Windows rules are applied on every system so that names also work after movi
 - **macOS**: open the disk image, drag the app to Applications. The app is signed ad hoc (no Apple account): the first start says "unidentified developer"; open *System Settings → Privacy & Security*, scroll down and click *Open Anyway*. From 26.10.4 on an Apple Silicon Mac no longer says the app is "damaged" (it did up to 26.10.3). **Second method**, in Terminal, which also opens an earlier version that says "damaged": `xattr -cr "/Applications/File Renamer.app" && codesign --force --deep -s - "/Applications/File Renamer.app"`.
 - **Linux**: make the AppImage executable and run it.
 
+The **user manual** is attached to every release as three PDFs: English (`File-Renamer-Manual-EN-<version>.pdf`), Italian (`-IT-`) and Spanish (`-ES-`). Its source is in `docs/manual/` (`python3 docs/manual/build.py <version> <folder>` makes the PDFs; it needs Chrome or Chromium).
+
 ## Validation and references
 
 Results as of 2026-10-23 on Linux (a cloud container, Node 22, Electron under a virtual screen); the 26.10.1 results were on macOS (APFS). This is not a certified tool.
