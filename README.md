@@ -77,6 +77,8 @@ The Windows rules are applied on every system so that names also work after movi
 - Find & replace with a regular expression uses the JavaScript engine of the app; a very heavy expression on thousands of files can make the preview slow. An invalid expression blocks the rename and says so. The clean-up rule "special characters" keeps letters, digits, space and `_ - .` and removes everything else.
 - Settings and presets are in `settings.json` in the app data folder; the values saved by 26.10.1 in the window are copied there at the first start.
 
+<a href="https://ko-fi.com/F8V328ADFH"><img height="36" src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Buy Me a Coffee at ko-fi.com"></a>
+
 ## Install
 
 - **Windows**: run the installer; SmartScreen may say "Windows protected your PC" (*More info → Run anyway*).
@@ -142,3 +144,9 @@ Versions are `YY.M.N` (e.g. `26.10.1`), tags `v26.10.1`. The version lives in `p
 ## Credits
 
 No third-party fonts. One library at run time: `music-metadata` (MIT, and its small dependencies, all MIT) reads the tags. Build tools: Electron and electron-builder (MIT).
+
+## Support
+
+This tool is free and will stay free, with source code. If it saved your day, you can leave a tip on Ko-fi: a thank-you, nothing more.
+
+<a href="https://ko-fi.com/F8V328ADFH"><img height="36" src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Buy Me a Coffee at ko-fi.com"></a>
